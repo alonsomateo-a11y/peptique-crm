@@ -3,8 +3,12 @@ import { NextResponse, type NextRequest } from "next/server"
 import { actualizarSesion } from "@/lib/supabase/proxy"
 
 export async function proxy(request: NextRequest) {
-  // Mientras no exista el proyecto de Supabase de Peptique, no se exige sesión.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+  // La sesión se exige solo cuando Supabase está configurado y el acceso con PIN ya existe.
+  if (
+    process.env.REQUIERE_SESION !== "1" ||
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  ) {
     return NextResponse.next()
   }
   return actualizarSesion(request)
