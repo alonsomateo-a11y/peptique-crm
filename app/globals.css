@@ -1,26 +1,223 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* Peptique CRM · solo light mode. Identidad del sitio de Peptique:
+   Hueso (fondo), Espresso (texto y acción principal), Sage (acento).
+   Títulos en Source Serif 4, texto en Manrope. */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-manrope);
+  --font-heading: var(--font-source-serif);
+  --font-serif: var(--font-source-serif);
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Estados: siempre con ícono + texto, nunca solo color */
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-crit: var(--crit);
+  --color-crit-bg: var(--crit-bg);
+  --color-hueso: var(--hueso);
+  --color-hueso-2: var(--hueso-2);
+  --color-espresso: var(--espresso);
+  --color-taupe: var(--taupe);
+  --color-sage: var(--sage);
+  --color-bruma: var(--bruma);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-chart-line-primary: var(--chart-line-primary);
+  --color-chart-line-secondary: var(--chart-line-secondary);
+  --color-chart-brush-border: var(--chart-brush-border);
+  --color-chart-tooltip-background: var(--chart-tooltip-background);
+  --color-chart-tooltip-foreground: var(--chart-tooltip-foreground);
+  --color-chart-tooltip-muted: var(--chart-tooltip-muted);
+  --color-chart-scale-02: var(--chart-scale-02);
+  --color-chart-scale-03: var(--chart-scale-03);
+  --color-chart-scale-04: var(--chart-scale-04);
+  --color-chart-scale-05: var(--chart-scale-05);
+  --color-chart-segment-line: var(--chart-segment-line);
+  --color-chart-segment-background: var(--chart-segment-background);
+  --color-chart-marker-badge-foreground: var(--chart-marker-badge-foreground);
+  --color-chart-marker-badge-background: var(--chart-marker-badge-background);
+  --color-chart-indicator-secondary-color: var(--chart-indicator-secondary-color);
+  --color-chart-indicator-color: var(--chart-indicator-color);
+  --color-chart-scale-pattern-color: var(--chart-scale-pattern-color);
+  --chart-scale-05: var(--chart-scale-05);
+  --chart-scale-04: var(--chart-scale-04);
+  --chart-scale-03: var(--chart-scale-03);
+  --chart-scale-02: var(--chart-scale-02);
+  --color-chart-scale-01: var(--chart-scale-01);
+  --color-chart-scale-mix: var(--chart-scale-mix);
+  --color-chart-label: var(--chart-label);
+  --color-chart-marker-foreground: var(--chart-marker-foreground);
+  --color-chart-marker-border: var(--chart-marker-border);
+  --color-chart-marker-background: var(--chart-marker-background);
+  --chart-tooltip-muted: var(--chart-tooltip-muted);
+  --chart-tooltip-foreground: var(--chart-tooltip-foreground);
+  --chart-tooltip-background: var(--chart-tooltip-background);
+  --chart-brush-border: var(--chart-brush-border);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-crosshair: var(--chart-crosshair);
+  --chart-line-secondary: var(--chart-line-secondary);
+  --chart-line-primary: var(--chart-line-primary);
+  --color-chart-foreground-muted: var(--chart-foreground-muted);
+  --color-chart-foreground: var(--chart-foreground);
+  --color-chart-background: var(--chart-background);
+  --color-chart-negative: var(--chart-negative);
+  --color-chart-positive: var(--chart-positive);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* Paleta de marca */
+  --hueso: #f5f0ea;
+  --hueso-2: #fbf8f4;
+  --espresso: #2b2622;
+  --taupe: #8c857b;
+  --sage: #a8bfa2;
+  --bruma: #c3d2cb;
+
+  --background: var(--hueso);
+  --foreground: var(--espresso);
+  --card: #ffffff;
+  --card-foreground: var(--espresso);
+  --popover: #ffffff;
+  --popover-foreground: var(--espresso);
+  --primary: var(--espresso);
+  --primary-foreground: var(--hueso);
+  --secondary: #efe9e1;
+  --secondary-foreground: var(--espresso);
+  --muted: #efe9e1;
+  /* Tinta 3: 5.6:1 sobre blanco, mínimo para texto secundario */
+  --muted-foreground: #6e665d;
+  --accent: #efe9e1;
+  --accent-foreground: var(--espresso);
+  --destructive: #a61b1b;
+  --border: #e7e0d6;
+  --input: #dcd3c7;
+  /* Foco visible: Sage profundo */
+  --ring: #4a7c59;
+
+  /* Gráficas: una serie principal en Sage profundo; referencias en Taupe */
+  --chart-1: #4a7c59;
+  --chart-2: #8fb089;
+  --chart-3: #c9d9c5;
+  --chart-4: #8c857b;
+  --chart-5: #d8cfc3;
+
+  --ok: #2f6b45;
+  --ok-bg: #e6f0e7;
+  --warn: #8a5a00;
+  --warn-bg: #fbf0d9;
+  --crit: #a61b1b;
+  --crit-bg: #f9e4e2;
+
+  --radius: 0.75rem;
+
+  --sidebar: var(--hueso);
+  --sidebar-foreground: #5c544c;
+  --sidebar-primary: var(--espresso);
+  --sidebar-primary-foreground: var(--hueso);
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: var(--espresso);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --chart-positive: var(--ok);
+  --chart-negative: var(--crit);
+  --chart-background: #ffffff;
+  --chart-foreground: var(--espresso);
+  --chart-foreground-muted: #6e665d;
+  --chart-line-primary: var(--chart-1);
+  --chart-line-secondary: var(--taupe);
+  --chart-crosshair: rgb(43 38 34 / 0.35);
+  --chart-grid: #efe9e1;
+  --chart-brush-border: var(--chart-grid);
+  --chart-tooltip-background: var(--popover);
+  --chart-tooltip-foreground: var(--popover-foreground);
+  --chart-tooltip-muted: var(--muted-foreground);
+  --chart-marker-background: var(--hueso-2);
+  --chart-marker-border: var(--border);
+  --chart-marker-foreground: #5c544c;
+  --chart-label: #6e665d;
+  --chart-scale-mix: oklch(1 0 0);
+  --chart-scale-01: #e7e0d6;
+  --chart-scale-02: color-mix(in oklab, var(--chart-1) 35%, var(--chart-scale-mix));
+  --chart-scale-03: color-mix(in oklab, var(--chart-1) 55%, var(--chart-scale-mix));
+  --chart-scale-04: color-mix(in oklab, var(--chart-1) 78%, var(--chart-scale-mix));
+  --chart-scale-05: var(--chart-1);
+  --chart-scale-pattern-color: oklch(1 0 0);
+  --chart-indicator-color: var(--espresso);
+  --chart-indicator-secondary-color: #e7e0d6;
+  --chart-marker-badge-background: var(--espresso);
+  --chart-marker-badge-foreground: var(--hueso);
+  --chart-segment-background: oklch(0.756 0 0 / 0.06);
+  --chart-segment-line: oklch(0.5 0 0 / 0.25);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-heading tracking-tight;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
+

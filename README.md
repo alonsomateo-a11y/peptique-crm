@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Peptique CRM · Fase 1
 
-## Getting Started
+Mostrador, ventas, red comercial, inventario por lote, COA protegido y reportes para Peptique.
+Next.js 16 + Supabase en Vercel. Producción: https://crm.peptique.com.mx
 
-First, run the development server:
+## Arrancar en local
 
 ```bash
+npm install
+cp .env.example .env.local   # llenar con las llaves del proyecto de Supabase
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Sin las variables de Supabase la app corre con datos simulados y sin pedir sesión (`lib/sesion.ts`, `lib/demo.ts`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Estructura
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `app/(auth)/entrar` · elegir perfil y PIN.
+- `app/(app)/*` · pantallas con menú lateral. El menú se filtra por perfil (`lib/nav.ts`).
+- `components/app` · componentes propios: menú, ruta de regreso, KPIs, estados, gráfica de ventas.
+- `components/ui` · shadcn/ui. `components/charts` · gráficas de Bklit.
+- `lib/supabase` · clientes de navegador, servidor y proxy. `proxy.ts` refresca la sesión.
+- `supabase/migrations` · esquema de base de datos y políticas RLS.
 
-## Learn More
+## Diseño
 
-To learn more about Next.js, take a look at the following resources:
+- Identidad de Peptique: Hueso, Espresso y Sage; títulos en Source Serif 4 y texto en Manrope. Solo light mode.
+- Referencia visual: wireframe Fase 1 (https://claude.ai/artifact/4C9BcYtpwaGdCaDRtB5PTh).
+- Estados siempre con ícono + texto. Gráficas con una serie en Sage profundo (`--chart-1`) y referencias en Taupe.
+- Drawers para crear y editar; modales solo para confirmar algo irreversible.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Pendientes de decisión
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Acceso con PIN.** Supabase Auth pide contraseñas de 6+ caracteres. Propuesta: el PIN se valida en el servidor
+  (`personas.pin_hash`, con límite de intentos) y el servidor abre la sesión del usuario ligado a esa persona.
+- **Regla de la etapa 3** de los protocolos (Peptique).
+- **Plan Pro de Vercel** antes de operar: el plan Hobby no permite uso comercial.
