@@ -244,7 +244,7 @@ create table bitacora (
 );
 
 -- ───────────── Vistas ─────────────
-create view existencias as
+create view existencias with (security_invoker = true) as
 select l.id as lote_id, l.producto_id, m.bolsa, coalesce(sum(m.cantidad), 0)::int as piezas
 from lotes l
 left join movimientos_inventario m on m.lote_id = l.id
