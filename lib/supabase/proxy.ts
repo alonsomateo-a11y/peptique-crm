@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-const RUTAS_PUBLICAS = ["/entrar"]
+const RUTAS_PUBLICAS = ["/entrar", "/salir"]
 
 /** Refresca la sesión de Supabase y manda a /entrar si no hay sesión. */
 export async function actualizarSesion(request: NextRequest) {

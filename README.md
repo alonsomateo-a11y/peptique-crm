@@ -29,9 +29,20 @@ Sin las variables de Supabase la app corre con datos simulados y sin pedir sesi�
 - Estados siempre con ícono + texto. Gráficas con una serie en Sage profundo (`--chart-1`) y referencias en Taupe.
 - Drawers para crear y editar; modales solo para confirmar algo irreversible.
 
+## Acceso con PIN
+
+- Cada persona elige su perfil, su nombre y escribe un PIN de 4 números. El PIN se guarda con bcrypt
+  y se valida solo en el servidor (`verificar_pin`, con la llave secreta). 5 intentos fallidos = 15 minutos de bloqueo.
+- Al validar, el servidor abre la sesión de Supabase del usuario ligado a esa persona (enlace mágico verificado en el servidor;
+  nunca se manda correo). Los usuarios usan un correo interno `p-<id>@personas.crm.peptique.com.mx`.
+- La sesión dura el turno: solo vale el mismo día (hora de Monterrey). El perfil temporal vence en su fecha.
+  El administrador puede cerrar sesiones a distancia (`cerrar_sesiones`).
+- El administrador puede entrar también con correo y contraseña (`/entrar/correo`) si su usuario tiene correo real.
+- Primer administrador: `node --env-file=.env.local scripts/crear-admin.mjs "Nombre" "WhatsApp" 1234 [correo]`.
+- En Supabase → Authentication, desactivar "Allow new users to sign up": los usuarios solo los crea el servidor.
+- Con `REQUIERE_SESION=1` se exige sesión; sin eso la app corre con un administrador de demostración.
+
 ## Pendientes de decisión
 
-- **Acceso con PIN.** Supabase Auth pide contraseñas de 6+ caracteres. Propuesta: el PIN se valida en el servidor
-  (`personas.pin_hash`, con límite de intentos) y el servidor abre la sesión del usuario ligado a esa persona.
 - **Regla de la etapa 3** de los protocolos (Peptique).
 - **Plan Pro de Vercel** antes de operar: el plan Hobby no permite uso comercial.
