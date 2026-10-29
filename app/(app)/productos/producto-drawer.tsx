@@ -58,6 +58,8 @@ export function ProductoDrawer({
     })
   }
 
+  // Los ejemplos solo se muestran al crear; al editar confundían con datos reales.
+  const ejemplo = (t: string) => (producto ? undefined : `Ej. ${t}`)
   const id = (k: string) => `producto-${k}`
   const aria = (k: string) => (err[k] ? { "aria-invalid": true, "aria-describedby": `${id(k)}-error` } : {})
 
@@ -83,13 +85,13 @@ export function ProductoDrawer({
 
           <div className="grid grid-cols-2 gap-3">
             <Campo id={id("nombre")} etiqueta="Nombre" error={err.nombre}>
-              <Input id={id("nombre")} name="nombre" defaultValue={producto?.nombre} placeholder="GHK-Cu" autoComplete="off" {...aria("nombre")} />
+              <Input id={id("nombre")} name="nombre" defaultValue={producto?.nombre} placeholder={ejemplo("GHK-Cu")} autoComplete="off" {...aria("nombre")} />
             </Campo>
             <Campo id={id("presentacion")} etiqueta="Presentación" error={err.presentacion}>
-              <Input id={id("presentacion")} name="presentacion" defaultValue={producto?.presentacion} placeholder="100 mg" autoComplete="off" {...aria("presentacion")} />
+              <Input id={id("presentacion")} name="presentacion" defaultValue={producto?.presentacion} placeholder={ejemplo("100 mg")} autoComplete="off" {...aria("presentacion")} />
             </Campo>
             <Campo id={id("familia")} etiqueta="Familia" error={err.familia}>
-              <Input id={id("familia")} name="familia" list="familias" defaultValue={producto?.familia} placeholder="Piel y cobre" autoComplete="off" {...aria("familia")} />
+              <Input id={id("familia")} name="familia" list="familias" defaultValue={producto?.familia} placeholder={ejemplo("Piel y cobre")} autoComplete="off" {...aria("familia")} />
               <datalist id="familias">
                 {familias.map((f) => (
                   <option key={f} value={f} />
@@ -97,7 +99,7 @@ export function ProductoDrawer({
               </datalist>
             </Campo>
             <Campo id={id("sku")} etiqueta="SKU" ayuda="Opcional" error={err.sku}>
-              <Input id={id("sku")} name="sku" defaultValue={producto?.sku ?? ""} placeholder="GHK-100" autoComplete="off" {...aria("sku")} />
+              <Input id={id("sku")} name="sku" defaultValue={producto?.sku ?? ""} placeholder={producto ? "Sin SKU" : ejemplo("GHK-100")} autoComplete="off" {...aria("sku")} />
             </Campo>
           </div>
 
