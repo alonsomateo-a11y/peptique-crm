@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { formatoMonedaCentavos } from "@/lib/format"
 import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { normalizarWhatsapp, whatsappValido } from "@/lib/telefono"
@@ -136,7 +137,7 @@ export async function cerrarCaja(cajaId: string, contado: number): Promise<{ err
     persona_id: s.personaId,
     perfil: s.perfil,
     area: "mostrador",
-    accion: `cerró la caja · debía haber $${esperado.toLocaleString("es-MX")} · contó $${contado.toLocaleString("es-MX")}${diferencia ? ` · diferencia $${diferencia.toLocaleString("es-MX")}` : " · sin diferencia"}`,
+    accion: `cerró la caja · debía haber ${formatoMonedaCentavos(esperado)} · contó ${formatoMonedaCentavos(contado)}${diferencia ? ` · diferencia ${formatoMonedaCentavos(diferencia)}` : " · sin diferencia"}`,
   })
   revalidatePath("/mostrador", "layout")
   return { diferencia }
