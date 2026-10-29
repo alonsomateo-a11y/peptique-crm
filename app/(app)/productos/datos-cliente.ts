@@ -38,3 +38,18 @@ export const margenDe = (precio: number | null, costo: number) => {
   const sinIva = precio / (1 + IVA)
   return Math.round(((sinIva - costo) / sinIva) * 100)
 }
+
+export type FilaImportada = {
+  original: string
+  nombre: string
+  presentacion: string
+  precio_publico: number | null
+  precio_medico: number | null
+  precio_distribuidor: number | null
+}
+
+export type CambioImportacion = FilaImportada & {
+  /** nuevo · precio (cambia algún precio) · igual */
+  tipo: "nuevo" | "precio" | "igual"
+  id?: string
+}

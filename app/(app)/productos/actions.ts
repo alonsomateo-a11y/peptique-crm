@@ -7,6 +7,9 @@ import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { crearClienteServidor } from "@/lib/supabase/server"
 
+import type { CambioImportacion } from "./datos-cliente"
+import { claveProducto, leerCatalogo } from "./importar"
+
 export type ResultadoProducto = { ok?: boolean; error?: string; errores?: Record<string, string> } | null
 
 const texto = (f: FormData, k: string) => String(f.get(k) ?? "").trim()
@@ -115,4 +118,83 @@ export async function enlaceProtocolo(ruta: string): Promise<string | null> {
   if (sesion.perfil !== "administrador" || !/^[0-9a-f-]{36}\/etapa-[1-3]\.pdf$/.test(ruta)) return null
   const { data } = await crearClienteAdmin().storage.from("protocolos").createSignedUrl(ruta, 60)
   return data?.signedUrl ?? null
+}
+
+export type ResultadoImportacion = { cambios?: CambioImportacion[]; importados?: { nuevos: number; precios: number }; error?: string }
+
+const FAMILIA_POR_ASIGNAR = "Por asignar"
+
+/** Compara el Excel contra el catálogo actual sin guardar nada. */
+async function compararCatalogo(form: FormData): Promise<ResultadoImportacion> {
+  const archivo = form.get("archivo")
+  if (!(archivo instanceof File) || archivo.size === 0) return { error: "Elige el archivo de Excel." }
+  if (!/\.xlsx$/i.test(archivo.name)) return { error: "Sube un archivo .xlsx." }
+  if (archivo.size > 5 * 1024 * 1024) return { error: "El archivo pesa más de 5 MB." }
+
+  let filas
+  try {
+    filas = await leerCatalogo(await archivo.arrayBuffer())
+  } catch (e) {
+    return { error: e instanceof Error && e.message.startsWith("No encontré") ? e.message : "No se pudo leer el Excel." }
+  }
+  if (!filas.length) return { error: "El Excel no trae productos." }
+
+  const supabase = await crearClienteServidor()
+  const { data: actuales } = await supabase.from("productos").select("id, nombre, presentacion, precio_publico, precio_medico, precio_distribuidor")
+  const porClave = new Map((actuales ?? []).map((p) => [claveProducto(p.nombre, p.presentacion), p]))
+  const igual = (a: number | string | null, b: number | null) => (a === null ? null : Number(a)) === b
+
+  return {
+    cambios: filas.map((f) => {
+      const p = porClave.get(claveProducto(f.nombre, f.presentacion))
+      if (!p) return { ...f, tipo: "nuevo" as const }
+      const mismo = igual(p.precio_publico, f.precio_publico) && igual(p.precio_medico, f.precio_medico) && igual(p.precio_distribuidor, f.precio_distribuidor)
+      return { ...f, tipo: mismo ? ("igual" as const) : ("precio" as const), id: p.id }
+    }),
+  }
+}
+
+export async function previsualizarCatalogo(form: FormData): Promise<ResultadoImportacion> {
+  const sesion = await obtenerSesion()
+  if (sesion.perfil !== "administrador") return { error: "Solo el administrador puede importar el catálogo." }
+  return compararCatalogo(form)
+}
+
+/** Agrega los productos nuevos y actualiza precios. No toca familia, protocolos ni estado de los existentes (salvo ocultar si quedan sin precio). */
+export async function importarCatalogo(form: FormData): Promise<ResultadoImportacion> {
+  const sesion = await obtenerSesion()
+  if (sesion.perfil !== "administrador") return { error: "Solo el administrador puede importar el catálogo." }
+  const { cambios, error } = await compararCatalogo(form)
+  if (error || !cambios) return { error }
+
+  const supabase = await crearClienteServidor()
+  const nuevos = cambios.filter((c) => c.tipo === "nuevo")
+  if (nuevos.length) {
+    const { error: e } = await supabase.from("productos").insert(
+      nuevos.map(({ nombre, presentacion, precio_publico, precio_medico, precio_distribuidor }) => ({
+        nombre,
+        presentacion,
+        familia: FAMILIA_POR_ASIGNAR,
+        precio_publico,
+        precio_medico,
+        precio_distribuidor,
+        visible: precio_publico !== null,
+      })),
+    )
+    if (e) return { error: "No se pudieron agregar los productos nuevos." }
+  }
+  const precios = cambios.filter((c) => c.tipo === "precio")
+  for (const c of precios) {
+    const cambio: Record<string, unknown> = { precio_publico: c.precio_publico, precio_medico: c.precio_medico, precio_distribuidor: c.precio_distribuidor }
+    if (c.precio_publico === null) cambio.visible = false
+    const { error: e } = await supabase.from("productos").update(cambio).eq("id", c.id!)
+    if (e) return { error: `No se pudo actualizar ${c.nombre} ${c.presentacion}.` }
+  }
+
+  await registrar(supabase, sesion, {
+    area: "productos",
+    accion: `importó el catálogo: ${nuevos.length} nuevos, ${precios.length} con precio actualizado`,
+  })
+  revalidatePath("/productos")
+  return { importados: { nuevos: nuevos.length, precios: precios.length } }
 }

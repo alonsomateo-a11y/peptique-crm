@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { AlertTriangle, FlaskConical, Plus, Search } from "lucide-react"
+import { AlertTriangle, FileSpreadsheet, FlaskConical, Plus, Search } from "lucide-react"
 
 import { Estado } from "@/components/app/estado"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import { formatoMoneda } from "@/lib/format"
 
 import type { ProductoFila } from "./datos-cliente"
 import { BarraMargen } from "./barra-margen"
+import { ImportarDrawer } from "./importar-drawer"
 import { ProductoDrawer } from "./producto-drawer"
 
 type Orden = "margen_desc" | "margen_asc" | "nombre"
@@ -26,6 +27,13 @@ export function ProductosVista({ productos, familias }: { productos: ProductoFil
   const [orden, setOrden] = useState<Orden>("margen_desc")
   const [abierto, setAbierto] = useState(false)
   const [editando, setEditando] = useState<ProductoFila | null>(null)
+  const [importando, setImportando] = useState(false)
+  const [vueltaImport, setVueltaImport] = useState(0)
+
+  function abrirImportar() {
+    setVueltaImport((v) => v + 1)
+    setImportando(true)
+  }
 
   const filas = useMemo(() => {
     const q = buscar.trim().toLowerCase()
@@ -98,6 +106,10 @@ export function ProductosVista({ productos, familias }: { productos: ProductoFil
           </SelectContent>
         </Select>
         <div className="flex-1" />
+        <Button variant="outline" size="lg" onClick={abrirImportar}>
+          <FileSpreadsheet aria-hidden />
+          Importar Excel
+        </Button>
         <Button size="lg" onClick={() => abrir(null)}>
           <Plus aria-hidden />
           Producto
@@ -113,10 +125,16 @@ export function ProductosVista({ productos, familias }: { productos: ProductoFil
           <p className="max-w-md text-sm text-muted-foreground">
             Agrega el catálogo con su precio, presentación y protocolos por etapa. Los productos sin precio quedan ocultos para el mostrador y la red.
           </p>
-          <Button onClick={() => abrir(null)}>
-            <Plus aria-hidden />
-            Agregar el primero
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={abrirImportar}>
+              <FileSpreadsheet aria-hidden />
+              Importar Excel
+            </Button>
+            <Button onClick={() => abrir(null)}>
+              <Plus aria-hidden />
+              Agregar uno
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border bg-card">
@@ -189,6 +207,7 @@ export function ProductosVista({ productos, familias }: { productos: ProductoFil
         El margen se compara contra el lote que está saliendo (el más viejo con piezas), con el precio público sin IVA. Reposición = piezas apartadas para recurrentes + venta promedio mensual (últimos 3 meses) × 1.05.
       </p>
 
+      <ImportarDrawer key={vueltaImport} abierto={importando} onOpenChange={setImportando} />
       <ProductoDrawer key={editando?.id ?? "nuevo"} abierto={abierto} onOpenChange={setAbierto} producto={editando} familias={familias} />
     </>
   )
