@@ -70,3 +70,10 @@ export async function obtenerSesion(): Promise<Sesion> {
     perfil: persona.perfil as Perfil,
   }
 }
+
+/** Para pantallas y acciones solo del administrador. */
+export async function exigirAdmin(): Promise<Sesion> {
+  const sesion = await obtenerSesion()
+  if (sesion.perfil !== "administrador") redirect(inicioPorPerfil(sesion.perfil))
+  return sesion
+}
