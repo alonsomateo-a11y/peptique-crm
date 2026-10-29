@@ -163,7 +163,11 @@ export function ProductosVista({ productos, familias }: { productos: ProductoFil
                       <b className="font-semibold">
                         {p.nombre} {p.presentacion}
                       </b>
-                      <div className="text-[11.5px] text-muted-foreground">{p.familia}</div>
+                      <div className="text-[11.5px] text-muted-foreground">
+                        {p.sku && <span className="font-mono">{p.sku}</span>}
+                        {p.sku && " · "}
+                        {p.familia}
+                      </div>
                     </TableCell>
                     <TableCell className="num">{p.precio_publico ? formatoMoneda(p.precio_publico) : <span className="text-muted-foreground">sin precio</span>}</TableCell>
                     <TableCell className="font-mono text-[12px]">{sale ? sale.codigo : <span className="font-sans text-muted-foreground">sin piezas</span>}</TableCell>

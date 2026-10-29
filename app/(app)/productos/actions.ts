@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { registrar } from "@/lib/bitacora"
+import { FAMILIA_POR_ASIGNAR, familiaDe, skuDe } from "@/lib/catalogo"
 import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { crearClienteServidor } from "@/lib/supabase/server"
@@ -32,7 +33,7 @@ export async function guardarProducto(_prev: ResultadoProducto, form: FormData):
     nombre: texto(form, "nombre"),
     presentacion: texto(form, "presentacion"),
     familia: texto(form, "familia"),
-    sku: texto(form, "sku") || null,
+    sku: (texto(form, "sku") || skuDe(texto(form, "nombre"), texto(form, "presentacion"))).toUpperCase(),
     precio_publico: dinero(form, "precio_publico"),
     precio_medico: dinero(form, "precio_medico"),
     precio_distribuidor: dinero(form, "precio_distribuidor"),
@@ -122,8 +123,6 @@ export async function enlaceProtocolo(ruta: string): Promise<string | null> {
 
 export type ResultadoImportacion = { cambios?: CambioImportacion[]; importados?: { nuevos: number; precios: number }; error?: string }
 
-const FAMILIA_POR_ASIGNAR = "Por asignar"
-
 /** Compara el Excel contra el catálogo actual sin guardar nada. */
 async function compararCatalogo(form: FormData): Promise<ResultadoImportacion> {
   const archivo = form.get("archivo")
@@ -140,7 +139,7 @@ async function compararCatalogo(form: FormData): Promise<ResultadoImportacion> {
   if (!filas.length) return { error: "El Excel no trae productos." }
 
   const supabase = await crearClienteServidor()
-  const { data: actuales } = await supabase.from("productos").select("id, nombre, presentacion, precio_publico, precio_medico, precio_distribuidor")
+  const { data: actuales } = await supabase.from("productos").select("id, nombre, presentacion, sku, familia, precio_publico, precio_medico, precio_distribuidor")
   const porClave = new Map((actuales ?? []).map((p) => [claveProducto(p.nombre, p.presentacion), p]))
   const igual = (a: number | string | null, b: number | null) => (a === null ? null : Number(a)) === b
 
@@ -149,7 +148,7 @@ async function compararCatalogo(form: FormData): Promise<ResultadoImportacion> {
       const p = porClave.get(claveProducto(f.nombre, f.presentacion))
       if (!p) return { ...f, tipo: "nuevo" as const }
       const mismo = igual(p.precio_publico, f.precio_publico) && igual(p.precio_medico, f.precio_medico) && igual(p.precio_distribuidor, f.precio_distribuidor)
-      return { ...f, tipo: mismo ? ("igual" as const) : ("precio" as const), id: p.id }
+      return { ...f, sku: p.sku ?? f.sku, tipo: mismo ? ("igual" as const) : ("precio" as const), id: p.id }
     }),
   }
 }
@@ -174,7 +173,8 @@ export async function importarCatalogo(form: FormData): Promise<ResultadoImporta
       nuevos.map(({ nombre, presentacion, precio_publico, precio_medico, precio_distribuidor }) => ({
         nombre,
         presentacion,
-        familia: FAMILIA_POR_ASIGNAR,
+        familia: familiaDe(nombre),
+        sku: skuDe(nombre, presentacion),
         precio_publico,
         precio_medico,
         precio_distribuidor,

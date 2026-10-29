@@ -43,6 +43,7 @@ export type FilaImportada = {
   original: string
   nombre: string
   presentacion: string
+  sku: string
   precio_publico: number | null
   precio_medico: number | null
   precio_distribuidor: number | null

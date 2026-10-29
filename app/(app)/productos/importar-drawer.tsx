@@ -99,7 +99,9 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
                         <b className="text-[13px] font-semibold">
                           {c.nombre} {c.presentacion !== "Única" && c.presentacion}
                         </b>
-                        <span className="block text-[11px] text-muted-foreground">Excel: {c.original}</span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          <span className="font-mono">{c.sku}</span> · Excel: {c.original}
+                        </span>
                       </TableCell>
                       <TableCell className="num text-right text-[13px]">{precio(c.precio_publico)}</TableCell>
                       <TableCell className="num text-right text-[13px]">{precio(c.precio_medico)}</TableCell>
@@ -119,7 +121,7 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
               </Table>
             </div>
             <p className="text-[11.5px] text-muted-foreground">
-              Los nuevos entran con familia “Por asignar”{sinPrecio > 0 && ` y ${sinPrecio} quedan ocultos por no tener precio`}. Los existentes solo cambian precios; su familia, protocolos y estado se conservan. Los costos no se importan: salen de cada lote en Inventario.
+              Los nuevos entran con su SKU y la familia de la web{sinPrecio > 0 && ` y ${sinPrecio} quedan ocultos por no tener precio`}. Los existentes solo cambian precios; su familia, protocolos y estado se conservan. Los costos no se importan: salen de cada lote en Inventario.
             </p>
           </>
         )}

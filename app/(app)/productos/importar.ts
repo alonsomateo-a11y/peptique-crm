@@ -2,6 +2,8 @@ import "server-only"
 
 import ExcelJS from "exceljs"
 
+import { skuDe } from "@/lib/catalogo"
+
 import type { FilaImportada } from "./datos-cliente"
 
 /** Nombres como vienen en el Excel → nombre comercial. */
@@ -91,6 +93,7 @@ export async function leerCatalogo(archivo: ArrayBuffer): Promise<FilaImportada[
           original,
           nombre,
           presentacion,
+          sku: skuDe(nombre, presentacion),
           precio_publico: dinero(valor(f.getCell(cols.publico).value)),
           precio_medico: cols.medico ? dinero(valor(f.getCell(cols.medico).value)) : null,
           precio_distribuidor: cols.distribuidor ? dinero(valor(f.getCell(cols.distribuidor).value)) : null,

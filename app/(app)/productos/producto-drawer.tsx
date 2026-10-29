@@ -10,6 +10,7 @@ import { Estado } from "@/components/app/estado"
 import { Segmentado } from "@/components/app/segmentado"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FAMILIAS } from "@/lib/catalogo"
 import { formatoMoneda } from "@/lib/format"
 import { enviarSinLimpiar } from "@/lib/formulario"
 
@@ -93,13 +94,13 @@ export function ProductoDrawer({
             <Campo id={id("familia")} etiqueta="Familia" error={err.familia}>
               <Input id={id("familia")} name="familia" list="familias" defaultValue={producto?.familia} placeholder={ejemplo("Piel y cobre")} autoComplete="off" {...aria("familia")} />
               <datalist id="familias">
-                {familias.map((f) => (
+                {[...new Set([...FAMILIAS, ...familias])].map((f) => (
                   <option key={f} value={f} />
                 ))}
               </datalist>
             </Campo>
-            <Campo id={id("sku")} etiqueta="SKU" ayuda="Opcional" error={err.sku}>
-              <Input id={id("sku")} name="sku" defaultValue={producto?.sku ?? ""} placeholder={producto ? "Sin SKU" : ejemplo("GHK-100")} autoComplete="off" {...aria("sku")} />
+            <Campo id={id("sku")} etiqueta="SKU" ayuda="Si lo dejas vacío se arma solo: CÓDIGO-DOSIS" error={err.sku}>
+              <Input id={id("sku")} name="sku" defaultValue={producto?.sku ?? ""} placeholder={producto ? "Sin SKU" : ejemplo("GHKCU-100")} autoComplete="off" {...aria("sku")} />
             </Campo>
           </div>
 
