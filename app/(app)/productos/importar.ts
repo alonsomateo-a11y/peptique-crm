@@ -12,7 +12,10 @@ const NOMBRES: [RegExp, string][] = [
   [/^ghk-?cu$/i, "GHK-Cu"],
   [/^bpc-?157$/i, "BPC-157"],
   [/^tb-?500$/i, "TB-500"],
-  [/^glp-?(\d)$/i, "GLP-$1"],
+  // Apodos del Excel financiero → nombre de la etiqueta.
+  [/^glp-?2$/i, "Tirzepatide"],
+  [/^glp-?3$/i, "Retatrutide"],
+  [/^wolf ?blend$/i, "Wolverine Stack"],
   [/^pt-?141$/i, "PT-141"],
   [/^mo(?:ts|st)[- ]?c$/i, "MOTS-c"],
   [/^ss-?31$/i, "SS-31"],
@@ -22,10 +25,15 @@ const NOMBRES: [RegExp, string][] = [
   [/^semax$/i, "Semax"],
   [/^selank$/i, "Selank"],
   [/^nad\+?$/i, "NAD+"],
-  [/^glutathione$/i, "Glutatión"],
+  [/^glutathione$/i, "Glutathione"],
   [/^epitalon$/i, "Epitalon"],
   [/^beauty blend$/i, "Beauty Blend"],
-  [/^wolf blend$/i, "Wolf Blend"],
+]
+
+/** Mezclas que el Excel escribe por componente y la etiqueta por total. */
+const PRESENTACION_ETIQUETA: [RegExp, string][] = [
+  [/^wolverine stack\|10\/10/i, "10 mg"],
+  [/^beauty blend\|50\/20/i, "60 mg"],
 ]
 
 /** "GHKCU 100" → GHK-Cu / 100 mg · "BAC water 30" → Agua bacteriostática / 30 ml. */
@@ -37,7 +45,9 @@ export function separarNombre(original: string) {
   if (/^ghkcuraw$/i.test(base)) [base, dosis] = ["GHK-Cu Raw", null]
   const nombre = NOMBRES.reduce((n, [re, rep]) => (re.test(n) ? n.replace(re, rep) : n), base.trim())
   const unidad = m?.[3]?.toLowerCase() ?? (/bacteriost/i.test(nombre) ? "ml" : "mg")
-  return { nombre, presentacion: dosis ? `${dosis.replace(",", ".")} ${unidad}` : "Única" }
+  const presentacion = dosis ? `${dosis.replace(",", ".")} ${unidad}` : "Única"
+  const total = PRESENTACION_ETIQUETA.find(([re]) => re.test(`${nombre}|${dosis ?? ""}`))?.[1]
+  return { nombre, presentacion: total ?? presentacion }
 }
 
 const valor = (v: ExcelJS.CellValue): unknown =>

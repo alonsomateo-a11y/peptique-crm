@@ -1,4 +1,5 @@
-// Familias y SKU del catálogo. Las familias siguen las áreas de peptique.com.mx.
+// Familias y SKU del catálogo. Las familias siguen las áreas de peptique.com.mx
+// y los nombres siguen las etiquetas físicas (fuente de verdad del catálogo).
 
 export const FAMILIAS = ["Cognitiva", "Composición corporal", "Energía", "Piel", "Sexual", "Tejido", "Insumos"] as const
 
@@ -9,7 +10,7 @@ const FAMILIA_DE: [RegExp, (typeof FAMILIAS)[number]][] = [
   [/^(selank|semax)\b/i, "Cognitiva"],
   [/^(glp|tirzepatid|retatrutid|tesamorelin|semaglutid)/i, "Composición corporal"],
   [/^(epitalon|mots-c|nad\+|ss-31)/i, "Energía"],
-  [/^(ghk-cu|ahk-cu|beauty blend|glow|klow|glutati)/i, "Piel"],
+  [/^(ghk-cu|ahk-cu|beauty blend|glow|klow|glutat)/i, "Piel"],
   [/^(pt-141|kisspeptin)/i, "Sexual"],
   [/^(bpc-157|tb-500|kpv|wolf|wolverine)/i, "Tejido"],
   [/^agua bacteriost/i, "Insumos"],
@@ -20,10 +21,11 @@ export const familiaDe = (nombre: string) => FAMILIA_DE.find(([re]) => re.test(n
 /** Códigos cortos donde el nombre completo sería muy largo. */
 const CODIGOS: [RegExp, string][] = [
   [/^agua bacteriost/i, "BAC"],
-  [/^glutati/i, "GLUT"],
+  [/^glutat/i, "GLUT"],
   [/^beauty blend/i, "BEAUTY"],
   [/^wolf/i, "WOLF"],
   [/^wolverine/i, "WOLV"],
+  [/^tirzepatid/i, "TIRZ"],
   [/^tesamorelin/i, "TESA"],
   [/^retatrutid/i, "RETA"],
   [/^kisspeptin/i, "KISS"],
