@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 
 import { ligaVenta } from "../ventas/tipos"
 import { cambiarPago } from "./actions"
+import { RedEnCamino, type VentaRed } from "./red-en-camino"
 
 export type PagoFila = {
   id: string
@@ -46,11 +47,11 @@ const ESTADO: Record<string, [string, "ok" | "warn" | "crit" | "neutro"]> = {
   devolucion: ["Devolución pendiente", "crit"],
 }
 
-type Pestana = "todos" | "por_conciliar" | "por_entregar" | "planes" | "devolucion"
+type Pestana = "todos" | "red" | "por_conciliar" | "por_entregar" | "planes" | "devolucion"
 const TODOS = "todos"
 
-export function PagosVista({ pagos, planes }: { pagos: PagoFila[]; planes: PlanFila[] }) {
-  const [pestana, setPestana] = useState<Pestana>("todos")
+export function PagosVista({ pagos, planes, red, pestanaInicial }: { pagos: PagoFila[]; planes: PlanFila[]; red: VentaRed[]; pestanaInicial?: string }) {
+  const [pestana, setPestana] = useState<Pestana>(pestanaInicial === "red" ? "red" : "todos")
   const [q, setQ] = useState("")
   const [metodo, setMetodo] = useState(TODOS)
   const [lugar, setLugar] = useState(TODOS)
@@ -60,6 +61,7 @@ export function PagosVista({ pagos, planes }: { pagos: PagoFila[]; planes: PlanF
   const cuenta = (e: string) => pagos.filter((p) => p.estado === e).length
   const pestanas: [Pestana, string, number | null][] = [
     ["todos", "Todos", pagos.length],
+    ["red", "Red · en camino", red.length],
     ["por_conciliar", "Por conciliar", cuenta("por_conciliar")],
     ["por_entregar", "Efectivo por entregar", cuenta("por_entregar")],
     ["planes", "Planes por dosis", planes.length],
@@ -104,7 +106,9 @@ export function PagosVista({ pagos, planes }: { pagos: PagoFila[]; planes: PlanF
         ))}
       </div>
 
-      {pestana === "planes" ? (
+      {pestana === "red" ? (
+        <RedEnCamino ventas={red} />
+      ) : pestana === "planes" ? (
         <div className="overflow-hidden rounded-2xl border bg-card">
           <Table>
             <TableHeader>

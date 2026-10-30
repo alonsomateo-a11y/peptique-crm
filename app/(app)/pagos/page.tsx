@@ -7,14 +7,22 @@ import type { Perfil } from "@/lib/perfiles"
 import { exigirAdmin } from "@/lib/sesion"
 import { crearClienteServidor } from "@/lib/supabase/server"
 
+import { liberarApartadosVencidos } from "@/lib/ventas"
+
 import { PagosVista, type PagoFila, type PlanFila } from "./pagos-vista"
+import type { VentaRed } from "./red-en-camino"
 
 export const metadata: Metadata = { title: "Pagos" }
 
-export default async function Pagos() {
+/** Horas que faltan para una fecha (negativo si ya pasó). */
+const horasHasta = (iso: string | null) => (iso ? (Date.parse(iso) - Date.now()) / 3_600_000 : null)
+
+export default async function Pagos({ searchParams }: PageProps<"/pagos">) {
+  const { pestana } = await searchParams
   await exigirAdmin()
+  await liberarApartadosVencidos()
   const supabase = await crearClienteServidor()
-  const [pagos, planes] = await Promise.all([
+  const [pagos, planes, red] = await Promise.all([
     supabase
       .from("pagos")
       .select("id, monto, metodo, lugar, estado, referencia, numero_dosis, creado_en, ventas(folio, clientes(nombre)), personas:cobro_persona_id(nombre, perfil)")
@@ -25,7 +33,35 @@ export default async function Pagos() {
       .select("id, folio, total, clientes(nombre), venta_partidas(productos(nombre, presentacion, pagos_por_dosis)), pagos(monto, numero_dosis, estado), dosis_aplicadas(numero)")
       .eq("forma_pago", "por_dosis")
       .neq("estado", "cancelada"),
+    supabase
+      .from("ventas")
+      .select("id, folio, estado, total, referencia_pago, apartado_vence_en, clientes(nombre), personas:vendedor_id(nombre), venta_partidas(cantidad, productos(nombre, presentacion))")
+      .eq("canal", "red")
+      .in("estado", ["esperando_pago", "pagada"])
+      .order("creado_en"),
   ])
+  type R = {
+    id: string
+    folio: string
+    estado: "esperando_pago" | "pagada"
+    total: number
+    referencia_pago: string | null
+    apartado_vence_en: string | null
+    clientes: { nombre: string } | null
+    personas: { nombre: string } | null
+    venta_partidas: { cantidad: number; productos: { nombre: string; presentacion: string } | null }[]
+  }
+  const ventasRed: VentaRed[] = ((red.data ?? []) as unknown as R[]).map((v) => ({
+    id: v.id,
+    folio: v.folio,
+    estado: v.estado,
+    total: Number(v.total),
+    cliente: v.clientes?.nombre ?? "—",
+    vendedor: v.personas?.nombre ?? "—",
+    productos: v.venta_partidas.map((p) => `${p.cantidad > 1 ? `${p.cantidad} × ` : ""}${p.productos?.nombre} ${p.productos?.presentacion}`).join(", "),
+    referencia: v.referencia_pago,
+    horasRestantes: horasHasta(v.apartado_vence_en),
+  }))
 
   type P = {
     id: string
@@ -121,7 +157,7 @@ export default async function Pagos() {
           )}
         </div>
       </section>
-      <PagosVista pagos={filas} planes={listaPlanes} />
+      <PagosVista pagos={filas} planes={listaPlanes} red={ventasRed} pestanaInicial={typeof pestana === "string" ? pestana : undefined} />
     </>
   )
 }

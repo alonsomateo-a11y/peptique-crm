@@ -94,6 +94,7 @@ export async function guardarPersona(_prev: Resultado, form: FormData): Promise<
         : `editó a ${datos.nombre}${pin ? " y cambió su PIN" : ""}`
   await registrar(supabase, sesion, { area: "equipo", accion, entidad: "persona", entidad_id: guardada.id })
   revalidatePath(RUTA)
+  revalidatePath("/red")
   return { ok: true }
 }
 
@@ -117,6 +118,7 @@ export async function desbloquearPersona(personaId: string): Promise<Resultado> 
   if (error) return { error: "No se pudo desbloquear." }
   await registrar(supabase, sesion, { area: "equipo", accion: "desbloqueó el PIN", entidad: "persona", entidad_id: personaId })
   revalidatePath(RUTA)
+  revalidatePath("/red")
   return { ok: true }
 }
 
@@ -132,5 +134,6 @@ export async function guardarComisiones(_prev: Resultado, form: FormData): Promi
   if (error) return { error: "No se pudieron guardar las comisiones." }
   await registrar(supabase, sesion, { area: "configuracion", accion: `cambió comisiones a ${directa}% + ${equipo}%` })
   revalidatePath(RUTA)
+  revalidatePath("/red")
   return { ok: true }
 }

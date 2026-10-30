@@ -11,8 +11,8 @@ import { crearClienteAdmin } from "@/lib/supabase/admin"
  * existencias) antes de escribir. Si algo falla a medio camino se deshace lo escrito.
  */
 
-/** pedido = médicos y distribuidores que pagan después (folio P-). */
-export type Canal = "mostrador_caja" | "en_persona" | "pedido"
+/** pedido = médicos y distribuidores que pagan después (folio P-). red = distribuidores y comisionistas (folio R-). */
+export type Canal = "mostrador_caja" | "en_persona" | "pedido" | "red"
 export type Metodo = "efectivo" | "tarjeta" | "transferencia"
 export type TipoCliente = "paciente" | "medico" | "distribuidor"
 
@@ -34,6 +34,9 @@ export type DatosVenta = {
 export type VentaRegistrada = {
   ventaId: string
   folio: string
+  /** Red: referencia para la transferencia (R0032-RS) y cuándo se libera el apartado. */
+  referencia?: string | null
+  vence?: string | null
   total: number
   cobrado: number
   cambio: number
@@ -69,6 +72,19 @@ async function siguienteFolio(admin: ReturnType<typeof crearClienteAdmin>, prefi
   return `${prefijo}-${String(ultimo + 1).padStart(4, "0")}`
 }
 
+/** R-0032 + Ricardo Salinas → R0032-RS (la escribe el cliente en su transferencia). */
+export const referenciaRed = (folio: string, vendedor: string) =>
+  `${folio.replace("-", "")}-${vendedor
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("")}`
+
+async function horasLiberarApartado(admin: ReturnType<typeof crearClienteAdmin>) {
+  const { data } = await admin.from("configuracion").select("valor").eq("clave", "reglas").maybeSingle()
+  return Number((data?.valor as { liberar_apartado_horas?: number } | undefined)?.liberar_apartado_horas) || 48
+}
+
 export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: VentaRegistrada } | { ok: false; error: string }> {
   if (d.vendedor.personaId === "demo") return { ok: false, error: "Entra con tu PIN para vender." }
   const items = d.items.filter((i) => i.cantidad > 0)
@@ -83,7 +99,8 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   // El waiver es del paciente; los pedidos de médicos y distribuidores no lo piden.
   if (!cliente.waiver_firmado_en && !(d.canal === "pedido" && cliente.tipo !== "paciente"))
     return { ok: false, error: "El cliente debe firmar el waiver antes de comprar." }
-  if (d.canal === "pedido" && d.forma === "por_dosis") return { ok: false, error: "Los pedidos se cobran completos." }
+  if ((d.canal === "pedido" || d.canal === "red") && d.forma === "por_dosis") return { ok: false, error: "Esta venta se cobra completa." }
+  if (d.canal === "red" && d.metodo === "efectivo") return { ok: false, error: "La red cobra por transferencia o terminal, sin efectivo." }
 
   const ids = [...new Set(items.map((i) => i.productoId))]
   const [{ data: productos }, { data: lotes }, { data: protocolos }, etapas] = await Promise.all([
@@ -134,14 +151,18 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
 
   const pagosPorDosis = d.forma === "por_dosis" ? (productos?.find((x) => x.id === items[0].productoId)?.pagos_por_dosis ?? 4) : 1
   const pedido = d.canal === "pedido"
-  const cobrado = pedido ? 0 : d.forma === "por_dosis" ? Math.ceil(total / pagosPorDosis) : total
+  const red = d.canal === "red"
+  // Pedidos y red no cobran al registrar: el pago llega después.
+  const sinPago = pedido || red
+  const cobrado = sinPago ? 0 : d.forma === "por_dosis" ? Math.ceil(total / pagosPorDosis) : total
+  const horasApartado = red ? await horasLiberarApartado(admin) : 0
   if (d.metodo === "efectivo" && d.recibido != null && d.recibido < cobrado) return { ok: false, error: "El efectivo recibido no alcanza." }
   const cambio = d.metodo === "efectivo" && d.recibido != null ? Math.round((d.recibido - cobrado) * 100) / 100 : 0
 
   // Venta (reintenta si dos ventas toman el mismo folio).
   let venta: { id: string; folio: string } | null = null
   for (let i = 0; i < 3 && !venta; i++) {
-    const folio = await siguienteFolio(admin, pedido ? "P" : "M")
+    const folio = await siguienteFolio(admin, pedido ? "P" : red ? "R" : "M")
     const { data, error } = await admin
       .from("ventas")
       .insert({
@@ -149,10 +170,11 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
         canal: d.canal,
         cliente_id: cliente.id,
         vendedor_id: d.vendedor.personaId,
-        estado: pedido || d.forma === "por_dosis" ? "por_cobrar" : "entregada",
+        estado: red ? "esperando_pago" : pedido || d.forma === "por_dosis" ? "por_cobrar" : "entregada",
         forma_pago: d.forma,
         total,
-        referencia_pago: d.referencia || null,
+        referencia_pago: red ? referenciaRed(folio, d.vendedor.nombre) : d.referencia || null,
+        apartado_vence_en: red ? new Date(Date.now() + horasApartado * 3_600_000).toISOString() : null,
         nota: d.nota || null,
       })
       .select("id, folio")
@@ -169,11 +191,20 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   }
 
   const r1 = await admin.from("venta_partidas").insert(partidas.map(({ bolsa: _b, ...x }) => ({ ...x, venta_id: venta!.id })))
+  // La red aparta en tránsito: sale de su bolsa y entra a "transito" hasta que se entrega o se libera.
   const r2 = await admin.from("movimientos_inventario").insert(
-    partidas.map((x) => ({ lote_id: x.lote_id, tipo: "venta", bolsa: x.bolsa, cantidad: -x.cantidad, venta_id: venta!.id, persona_id: d.vendedor.personaId })),
+    partidas.flatMap((x) => {
+      const base = { lote_id: x.lote_id, venta_id: venta!.id, persona_id: d.vendedor.personaId }
+      return red
+        ? [
+            { ...base, tipo: "apartado_transito", bolsa: x.bolsa, cantidad: -x.cantidad },
+            { ...base, tipo: "apartado_transito", bolsa: "transito", cantidad: x.cantidad },
+          ]
+        : [{ ...base, tipo: "venta", bolsa: x.bolsa, cantidad: -x.cantidad }]
+    }),
   )
   const efectivoEnPersona = d.metodo === "efectivo" && d.canal === "en_persona"
-  const r3 = pedido
+  const r3 = sinPago
     ? { error: null }
     : await admin.from("pagos").insert({
     venta_id: venta.id,
@@ -213,8 +244,10 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   await admin.from("bitacora").insert({
     persona_id: d.vendedor.personaId,
     perfil: d.vendedor.perfil,
-    area: d.canal === "mostrador_caja" ? "mostrador" : "ventas",
-    accion: pedido
+    area: d.canal === "mostrador_caja" ? "mostrador" : red ? "red" : "ventas",
+    accion: red
+      ? `vendió ${venta.folio} por la red a ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · esperando pago (${d.metodo === "tarjeta" ? "terminal" : "transferencia"})`
+      : pedido
       ? `creó el pedido ${venta.folio} para ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · por cobrar ${total.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}`
       : `vendió ${venta.folio} ${d.canal === "mostrador_caja" ? "en caja" : "en persona"} a ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · ${METODO[d.metodo]}${d.forma === "por_dosis" ? ` (dosis 1 de ${pagosPorDosis})` : ""}`,
     entidad: "venta",
@@ -227,6 +260,8 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
     venta: {
       ventaId: venta.id,
       folio: venta.folio,
+      referencia: red ? referenciaRed(venta.folio, d.vendedor.nombre) : null,
+      vence: red ? new Date(Date.now() + horasApartado * 3_600_000).toISOString() : null,
       total,
       cobrado,
       cambio,
@@ -357,6 +392,22 @@ export async function marcarEntregada(sesion: Sesion, ventaId: string) {
 }
 
 /**
+ * Movimientos que dejan el inventario como antes de la venta: se suma lo neto por lote y bolsa
+ * y se registra lo contrario (sirve para ventas de caja, pedidos y apartados de la red).
+ */
+async function revertirInventario(admin: ReturnType<typeof crearClienteAdmin>, ventaId: string, tipo: "cancelacion" | "liberacion", personaId: string | null, nota: string) {
+  const { data } = await admin.from("movimientos_inventario").select("lote_id, bolsa, cantidad").eq("venta_id", ventaId)
+  const neto = new Map<string, number>()
+  for (const m of data ?? []) neto.set(`${m.lote_id}|${m.bolsa}`, (neto.get(`${m.lote_id}|${m.bolsa}`) ?? 0) + m.cantidad)
+  return [...neto]
+    .filter(([, n]) => n !== 0)
+    .map(([k, n]) => {
+      const [lote_id, bolsa] = k.split("|")
+      return { lote_id, bolsa, tipo, cantidad: -n, venta_id: ventaId, persona_id: personaId, nota }
+    })
+}
+
+/**
  * Cancela una venta: las piezas regresan a su lote y bolsa, se quitan sus avisos de recompra
  * pendientes y los pagos quedan como devolución pendiente.
  */
@@ -367,8 +418,7 @@ export async function cancelarVenta(sesion: Sesion, ventaId: string, motivo: str
   if (s.v.estado === "cancelada") return { ok: false as const, error: "La venta ya estaba cancelada." }
   if (motivo.trim().length < 3) return { ok: false as const, error: "Indica el motivo." }
 
-  const { data: salidas } = await admin.from("movimientos_inventario").select("lote_id, bolsa, cantidad").eq("venta_id", ventaId).in("tipo", ["venta", "apartado_transito"])
-  const regresos = (salidas ?? []).filter((m) => m.cantidad < 0).map((m) => ({ lote_id: m.lote_id, tipo: "cancelacion", bolsa: m.bolsa, cantidad: -m.cantidad, venta_id: ventaId, persona_id: sesion.personaId, nota: motivo }))
+  const regresos = await revertirInventario(admin, ventaId, "cancelacion", sesion.personaId, motivo)
   if (regresos.length) {
     const { error } = await admin.from("movimientos_inventario").insert(regresos)
     if (error) return { ok: false as const, error: "No se pudo regresar el inventario. La venta sigue activa." }
@@ -376,6 +426,7 @@ export async function cancelarVenta(sesion: Sesion, ventaId: string, motivo: str
   await admin.from("ventas").update({ estado: "cancelada", motivo_cancelacion: [motivo.trim(), nota?.trim()].filter(Boolean).join(" · ") }).eq("id", ventaId)
   await admin.from("avisos_recompra").delete().eq("venta_id", ventaId).in("estado", ["por_avisar", "contactado"])
   await admin.from("pagos").update({ estado: "devolucion" }).eq("venta_id", ventaId)
+  await admin.from("comisiones").delete().eq("venta_id", ventaId).is("pagada_en", null)
   await admin.from("bitacora").insert({
     persona_id: sesion.personaId,
     perfil: sesion.perfil,
@@ -406,4 +457,98 @@ export async function cambiarEstadoPago(sesion: Sesion, pagoId: string, accion: 
     entidad_id: p.venta_id,
   })
   return { ok: true as const }
+}
+
+/* ───────────── Red comercial ───────────── */
+
+const IVA = 0.16
+
+/**
+ * Pago de una venta de la red reflejado (transferencia con su referencia o cobro de terminal).
+ * Genera las comisiones: 13% a quien vendió y, si es comisionista, 3% a su distribuidor,
+ * sobre la venta sin IVA. Por ahora lo marca el administrador; después se conecta al banco.
+ */
+export async function marcarPagoReflejado(sesion: Sesion, ventaId: string, metodo: Metodo, referencia?: string | null) {
+  const admin = crearClienteAdmin()
+  const { data: v } = await admin
+    .from("ventas")
+    .select("id, folio, total, estado, canal, referencia_pago, vendedor_id, clientes(nombre), personas:vendedor_id(nombre, perfil, distribuidor_id)")
+    .eq("id", ventaId)
+    .maybeSingle()
+  if (!v || v.canal !== "red") return { ok: false as const, error: "No es una venta de la red." }
+  if (v.estado !== "esperando_pago") return { ok: false as const, error: "Esta venta ya no está esperando pago." }
+  const vendedor = v.personas as unknown as { nombre: string; perfil: string; distribuidor_id: string | null } | null
+
+  const { error } = await admin.from("pagos").insert({
+    venta_id: v.id,
+    monto: Number(v.total),
+    metodo,
+    lugar: "red",
+    cobro_persona_id: v.vendedor_id,
+    estado: "reflejado",
+    referencia: referencia || v.referencia_pago,
+  })
+  if (error) return { ok: false as const, error: "No se pudo registrar el pago." }
+  await admin.from("ventas").update({ estado: "pagada", apartado_vence_en: null }).eq("id", v.id)
+
+  const { data: conf } = await admin.from("configuracion").select("valor").eq("clave", "comisiones").maybeSingle()
+  const pct = (conf?.valor ?? { directa: 13, equipo: 3 }) as { directa: number; equipo: number }
+  const base = Number(v.total) / (1 + IVA)
+  const filas = [{ venta_id: v.id, persona_id: v.vendedor_id, tipo: "directa", porcentaje: pct.directa, monto: Math.round(base * pct.directa) / 100 }]
+  if (vendedor?.perfil === "comisionista" && vendedor.distribuidor_id)
+    filas.push({ venta_id: v.id, persona_id: vendedor.distribuidor_id, tipo: "equipo", porcentaje: pct.equipo, monto: Math.round(base * pct.equipo) / 100 })
+  await admin.from("comisiones").insert(filas)
+
+  await admin.from("bitacora").insert({
+    persona_id: sesion.personaId,
+    perfil: sesion.perfil,
+    area: "red",
+    accion: `marcó reflejado el pago de ${v.folio} (${moneda(Number(v.total))}, ${(v.clientes as unknown as { nombre: string } | null)?.nombre ?? ""}) · comisión de ${vendedor?.nombre ?? "vendedor"} ${moneda(filas[0].monto)}`,
+    entidad: "venta",
+    entidad_id: v.id,
+  })
+  return { ok: true as const }
+}
+
+/** Entrega al vendedor de la red: solo con el pago reflejado. Las piezas salen de "transito". */
+export async function entregarVentaRed(sesion: Sesion, ventaId: string) {
+  const admin = crearClienteAdmin()
+  const { data: v } = await admin.from("ventas").select("id, folio, estado, canal, personas:vendedor_id(nombre)").eq("id", ventaId).maybeSingle()
+  if (!v || v.canal !== "red") return { ok: false as const, error: "No es una venta de la red." }
+  if (v.estado !== "pagada") return { ok: false as const, error: "Se entrega cuando el pago ya se reflejó." }
+  const { data: apartado } = await admin.from("movimientos_inventario").select("lote_id, cantidad").eq("venta_id", ventaId).eq("bolsa", "transito")
+  const neto = new Map<string, number>()
+  for (const m of apartado ?? []) neto.set(m.lote_id, (neto.get(m.lote_id) ?? 0) + m.cantidad)
+  const salidas = [...neto].filter(([, n]) => n > 0).map(([lote_id, n]) => ({ lote_id, tipo: "entrega", bolsa: "transito", cantidad: -n, venta_id: ventaId, persona_id: sesion.personaId }))
+  if (salidas.length) {
+    const { error } = await admin.from("movimientos_inventario").insert(salidas)
+    if (error) return { ok: false as const, error: "No se pudo registrar la entrega." }
+  }
+  await admin.from("ventas").update({ estado: "entregada" }).eq("id", ventaId)
+  await admin.from("bitacora").insert({
+    persona_id: sesion.personaId,
+    perfil: sesion.perfil,
+    area: "red",
+    accion: `entregó ${v.folio} a ${(v.personas as unknown as { nombre: string } | null)?.nombre ?? "su vendedor"}`,
+    entidad: "venta",
+    entidad_id: ventaId,
+  })
+  return { ok: true as const }
+}
+
+/**
+ * Libera los apartados de la red que pasaron su plazo sin pago: las piezas regresan a su bolsa
+ * y la venta se cancela. Se corre al abrir las pantallas de la red y de pagos (no hay cron).
+ */
+export async function liberarApartadosVencidos() {
+  const admin = crearClienteAdmin()
+  const { data } = await admin.from("ventas").select("id, folio, vendedor_id").eq("canal", "red").eq("estado", "esperando_pago").lt("apartado_vence_en", new Date().toISOString())
+  for (const v of data ?? []) {
+    const regresos = await revertirInventario(admin, v.id, "liberacion", null, "apartado liberado sin pago")
+    if (regresos.length) await admin.from("movimientos_inventario").insert(regresos)
+    await admin.from("ventas").update({ estado: "cancelada", motivo_cancelacion: "Sin pago en el plazo · apartado liberado" }).eq("id", v.id)
+    await admin.from("avisos_recompra").delete().eq("venta_id", v.id)
+    await admin.from("bitacora").insert({ area: "red", accion: `liberó el apartado de ${v.folio}: no se reflejó el pago a tiempo`, entidad: "venta", entidad_id: v.id })
+  }
+  return (data ?? []).length
 }

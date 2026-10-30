@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState, useTransition } from "react"
 import { AlertTriangle, Ban, Check, Loader2, MessageCircle, PackageCheck, Wallet } from "lucide-react"
 import { toast } from "sonner"
@@ -73,13 +74,18 @@ export function AccionesVenta({ venta, cliente, lotes }: { venta: VentaAcciones;
           Cobrar dosis {siguienteCobrar} · {formatoMoneda(Math.ceil(venta.total / venta.de))}
         </Button>
       )}
-      {activa && !venta.porDosis && venta.saldo > 0 && (
+      {venta.canal === "red" && (venta.estado === "esperando_pago" || venta.estado === "pagada") && (
+        <Button size="lg" asChild>
+          <Link href="/pagos?pestana=red">{venta.estado === "pagada" ? "Entregar en Pagos" : "Ver en Pagos · red en camino"}</Link>
+        </Button>
+      )}
+      {activa && venta.canal !== "red" && !venta.porDosis && venta.saldo > 0 && (
         <Button size="lg" onClick={() => setPagoAbierto(true)}>
           <Wallet aria-hidden />
           Registrar pago · {formatoMoneda(venta.saldo)}
         </Button>
       )}
-      {venta.estado === "pagada" && (
+      {venta.estado === "pagada" && venta.canal !== "red" && (
         <Button size="lg" disabled={ocupado} onClick={() => correr(() => entregarVenta(venta.id, venta.folio), `${venta.folio} entregada`)}>
           <PackageCheck aria-hidden />
           Marcar entregada

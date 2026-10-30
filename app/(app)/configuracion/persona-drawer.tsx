@@ -38,13 +38,15 @@ export function PersonaDrawer({
   onOpenChange,
   persona,
   distribuidores,
+  perfilInicial = "mostrador",
 }: {
   abierto: boolean
   onOpenChange: (v: boolean) => void
   persona: PersonaFila | null
   distribuidores: PersonaFila[]
+  perfilInicial?: Perfil
 }) {
-  const [perfil, setPerfil] = useState<Perfil>(persona?.perfil ?? "mostrador")
+  const [perfil, setPerfil] = useState<Perfil>(persona?.perfil ?? perfilInicial)
   const [estado, setEstado] = useState(persona?.estado === "por_aprobar" ? "activo" : (persona?.estado ?? "activo"))
   const [ocupado, iniciar] = useTransition()
 
