@@ -11,7 +11,8 @@ import { crearClienteAdmin } from "@/lib/supabase/admin"
  * existencias) antes de escribir. Si algo falla a medio camino se deshace lo escrito.
  */
 
-export type Canal = "mostrador_caja" | "en_persona"
+/** pedido = médicos y distribuidores que pagan después (folio P-). */
+export type Canal = "mostrador_caja" | "en_persona" | "pedido"
 export type Metodo = "efectivo" | "tarjeta" | "transferencia"
 export type TipoCliente = "paciente" | "medico" | "distribuidor"
 
@@ -27,6 +28,7 @@ export type DatosVenta = {
   /** Efectivo que entrega el cliente (para calcular el cambio). */
   recibido?: number | null
   referencia?: string | null
+  nota?: string | null
 }
 
 export type VentaRegistrada = {
@@ -78,7 +80,10 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   const admin = crearClienteAdmin()
   const { data: cliente } = await admin.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").eq("id", d.clienteId).maybeSingle()
   if (!cliente) return { ok: false, error: "Cliente no encontrado." }
-  if (!cliente.waiver_firmado_en) return { ok: false, error: "El cliente debe firmar el waiver antes de comprar." }
+  // El waiver es del paciente; los pedidos de médicos y distribuidores no lo piden.
+  if (!cliente.waiver_firmado_en && !(d.canal === "pedido" && cliente.tipo !== "paciente"))
+    return { ok: false, error: "El cliente debe firmar el waiver antes de comprar." }
+  if (d.canal === "pedido" && d.forma === "por_dosis") return { ok: false, error: "Los pedidos se cobran completos." }
 
   const ids = [...new Set(items.map((i) => i.productoId))]
   const [{ data: productos }, { data: lotes }, { data: protocolos }, etapas] = await Promise.all([
@@ -128,14 +133,15 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   }
 
   const pagosPorDosis = d.forma === "por_dosis" ? (productos?.find((x) => x.id === items[0].productoId)?.pagos_por_dosis ?? 4) : 1
-  const cobrado = d.forma === "por_dosis" ? Math.ceil(total / pagosPorDosis) : total
+  const pedido = d.canal === "pedido"
+  const cobrado = pedido ? 0 : d.forma === "por_dosis" ? Math.ceil(total / pagosPorDosis) : total
   if (d.metodo === "efectivo" && d.recibido != null && d.recibido < cobrado) return { ok: false, error: "El efectivo recibido no alcanza." }
   const cambio = d.metodo === "efectivo" && d.recibido != null ? Math.round((d.recibido - cobrado) * 100) / 100 : 0
 
   // Venta (reintenta si dos ventas toman el mismo folio).
   let venta: { id: string; folio: string } | null = null
   for (let i = 0; i < 3 && !venta; i++) {
-    const folio = await siguienteFolio(admin, "M")
+    const folio = await siguienteFolio(admin, pedido ? "P" : "M")
     const { data, error } = await admin
       .from("ventas")
       .insert({
@@ -143,10 +149,11 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
         canal: d.canal,
         cliente_id: cliente.id,
         vendedor_id: d.vendedor.personaId,
-        estado: d.forma === "por_dosis" ? "por_cobrar" : "entregada",
+        estado: pedido || d.forma === "por_dosis" ? "por_cobrar" : "entregada",
         forma_pago: d.forma,
         total,
         referencia_pago: d.referencia || null,
+        nota: d.nota || null,
       })
       .select("id, folio")
       .single()
@@ -166,13 +173,15 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
     partidas.map((x) => ({ lote_id: x.lote_id, tipo: "venta", bolsa: x.bolsa, cantidad: -x.cantidad, venta_id: venta!.id, persona_id: d.vendedor.personaId })),
   )
   const efectivoEnPersona = d.metodo === "efectivo" && d.canal === "en_persona"
-  const r3 = await admin.from("pagos").insert({
+  const r3 = pedido
+    ? { error: null }
+    : await admin.from("pagos").insert({
     venta_id: venta.id,
     monto: cobrado,
     metodo: d.metodo,
     lugar: d.canal === "mostrador_caja" ? "caja" : "en_persona",
-    cobro_persona_id: d.vendedor.personaId,
-    estado: d.metodo === "efectivo" ? (efectivoEnPersona ? "por_entregar" : "en_caja") : "por_conciliar",
+        cobro_persona_id: d.vendedor.personaId,
+        estado: d.metodo === "efectivo" ? (efectivoEnPersona ? "por_entregar" : "en_caja") : "por_conciliar",
     referencia: d.referencia || null,
     numero_dosis: d.forma === "por_dosis" ? 1 : null,
   })
@@ -205,7 +214,9 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
     persona_id: d.vendedor.personaId,
     perfil: d.vendedor.perfil,
     area: d.canal === "mostrador_caja" ? "mostrador" : "ventas",
-    accion: `vendió ${venta.folio} ${d.canal === "mostrador_caja" ? "en caja" : "en persona"} a ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · ${METODO[d.metodo]}${d.forma === "por_dosis" ? ` (dosis 1 de ${pagosPorDosis})` : ""}`,
+    accion: pedido
+      ? `creó el pedido ${venta.folio} para ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · por cobrar ${total.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}`
+      : `vendió ${venta.folio} ${d.canal === "mostrador_caja" ? "en caja" : "en persona"} a ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · ${METODO[d.metodo]}${d.forma === "por_dosis" ? ` (dosis 1 de ${pagosPorDosis})` : ""}`,
     entidad: "venta",
     entidad_id: venta.id,
     producto_id: ids[0],
@@ -286,4 +297,113 @@ export async function cobrarDosis(vendedor: Sesion, ventaId: string, metodo: Met
     entidad_id: v.id,
   })
   return { ok: true as const, numero, monto }
+}
+
+const moneda = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 })
+
+/** Saldo de una venta: total menos pagos válidos (las devoluciones no cuentan). */
+async function saldoDe(admin: ReturnType<typeof crearClienteAdmin>, ventaId: string) {
+  const { data: v } = await admin.from("ventas").select("id, folio, total, estado, canal, forma_pago, clientes(nombre), pagos(monto, estado)").eq("id", ventaId).maybeSingle()
+  if (!v) return null
+  const pagado = (v.pagos as { monto: number; estado: string }[]).filter((p) => p.estado !== "devolucion").reduce((s, p) => s + Number(p.monto), 0)
+  return { v, pagado, saldo: Math.round((Number(v.total) - pagado) * 100) / 100, cliente: (v.clientes as unknown as { nombre: string } | null)?.nombre ?? "" }
+}
+
+/** Pago registrado desde el escritorio (pedidos, saldos, transferencias que llegan después). */
+export async function registrarPago(
+  sesion: Sesion,
+  p: { ventaId: string; monto: number; metodo: Metodo; lugar: "caja" | "en_persona" | "banco"; referencia?: string | null; fecha?: string | null },
+) {
+  const admin = crearClienteAdmin()
+  const s = await saldoDe(admin, p.ventaId)
+  if (!s || s.v.estado === "cancelada") return { ok: false as const, error: "La venta no existe o está cancelada." }
+  if (s.v.forma_pago === "por_dosis") return { ok: false as const, error: "Los planes por dosis se cobran dosis por dosis." }
+  if (!(p.monto > 0) || p.monto > s.saldo + 0.001) return { ok: false as const, error: `El monto debe ser entre $1 y el saldo (${moneda(s.saldo)}).` }
+
+  const creado = p.fecha && /^\d{4}-\d{2}-\d{2}$/.test(p.fecha) && p.fecha !== hoyMty() ? new Date(`${p.fecha}T12:00:00-06:00`).toISOString() : undefined
+  const { error } = await admin.from("pagos").insert({
+    venta_id: p.ventaId,
+    monto: p.monto,
+    metodo: p.metodo,
+    lugar: p.lugar,
+    cobro_persona_id: sesion.personaId,
+    estado: p.metodo === "efectivo" ? (p.lugar === "caja" ? "en_caja" : p.lugar === "en_persona" ? "por_entregar" : "conciliado") : p.lugar === "banco" ? "conciliado" : "por_conciliar",
+    referencia: p.referencia || null,
+    ...(creado ? { creado_en: creado } : {}),
+  })
+  if (error) return { ok: false as const, error: "No se pudo registrar el pago." }
+  const saldo = Math.round((s.saldo - p.monto) * 100) / 100
+  if (saldo <= 0 && s.v.estado !== "entregada") await admin.from("ventas").update({ estado: "pagada" }).eq("id", p.ventaId)
+  await admin.from("bitacora").insert({
+    persona_id: sesion.personaId,
+    perfil: sesion.perfil,
+    area: "pagos",
+    accion: `registró un pago de ${moneda(p.monto)} de ${s.v.folio} (${s.cliente}) · ${p.metodo}${saldo > 0 ? ` · saldo ${moneda(saldo)}` : " · liquidada"}`,
+    entidad: "venta",
+    entidad_id: p.ventaId,
+  })
+  return { ok: true as const, saldo }
+}
+
+export async function marcarEntregada(sesion: Sesion, ventaId: string) {
+  const admin = crearClienteAdmin()
+  const s = await saldoDe(admin, ventaId)
+  if (!s) return { ok: false as const, error: "Venta no encontrada." }
+  if (s.v.estado === "cancelada" || s.v.estado === "entregada") return { ok: false as const, error: "La venta ya no se puede entregar." }
+  if (s.saldo > 0 && s.v.forma_pago !== "por_dosis") return { ok: false as const, error: `Falta cobrar ${moneda(s.saldo)} antes de entregar.` }
+  await admin.from("ventas").update({ estado: "entregada" }).eq("id", ventaId)
+  await admin.from("bitacora").insert({ persona_id: sesion.personaId, perfil: sesion.perfil, area: "ventas", accion: `entregó ${s.v.folio} a ${s.cliente}`, entidad: "venta", entidad_id: ventaId })
+  return { ok: true as const }
+}
+
+/**
+ * Cancela una venta: las piezas regresan a su lote y bolsa, se quitan sus avisos de recompra
+ * pendientes y los pagos quedan como devolución pendiente.
+ */
+export async function cancelarVenta(sesion: Sesion, ventaId: string, motivo: string, nota?: string | null) {
+  const admin = crearClienteAdmin()
+  const s = await saldoDe(admin, ventaId)
+  if (!s) return { ok: false as const, error: "Venta no encontrada." }
+  if (s.v.estado === "cancelada") return { ok: false as const, error: "La venta ya estaba cancelada." }
+  if (motivo.trim().length < 3) return { ok: false as const, error: "Indica el motivo." }
+
+  const { data: salidas } = await admin.from("movimientos_inventario").select("lote_id, bolsa, cantidad").eq("venta_id", ventaId).in("tipo", ["venta", "apartado_transito"])
+  const regresos = (salidas ?? []).filter((m) => m.cantidad < 0).map((m) => ({ lote_id: m.lote_id, tipo: "cancelacion", bolsa: m.bolsa, cantidad: -m.cantidad, venta_id: ventaId, persona_id: sesion.personaId, nota: motivo }))
+  if (regresos.length) {
+    const { error } = await admin.from("movimientos_inventario").insert(regresos)
+    if (error) return { ok: false as const, error: "No se pudo regresar el inventario. La venta sigue activa." }
+  }
+  await admin.from("ventas").update({ estado: "cancelada", motivo_cancelacion: [motivo.trim(), nota?.trim()].filter(Boolean).join(" · ") }).eq("id", ventaId)
+  await admin.from("avisos_recompra").delete().eq("venta_id", ventaId).in("estado", ["por_avisar", "contactado"])
+  await admin.from("pagos").update({ estado: "devolucion" }).eq("venta_id", ventaId)
+  await admin.from("bitacora").insert({
+    persona_id: sesion.personaId,
+    perfil: sesion.perfil,
+    area: "ventas",
+    accion: `canceló ${s.v.folio} (${s.cliente}) · ${motivo.trim()}${s.pagado ? ` · ${moneda(s.pagado)} queda como devolución pendiente` : ""}`,
+    entidad: "venta",
+    entidad_id: ventaId,
+  })
+  return { ok: true as const }
+}
+
+/** Conciliar (tarjeta/transferencia vista en el banco) o recibir efectivo por entregar. */
+export async function cambiarEstadoPago(sesion: Sesion, pagoId: string, accion: "conciliar" | "recibir") {
+  const admin = crearClienteAdmin()
+  const { data: p } = await admin.from("pagos").select("id, estado, monto, metodo, venta_id, ventas(folio), personas:cobro_persona_id(nombre)").eq("id", pagoId).maybeSingle()
+  if (!p) return { ok: false as const, error: "Pago no encontrado." }
+  const esperado = accion === "conciliar" ? "por_conciliar" : "por_entregar"
+  if (p.estado !== esperado) return { ok: false as const, error: "Ese pago ya cambió de estado." }
+  await admin.from("pagos").update({ estado: accion === "conciliar" ? "conciliado" : "en_caja" }).eq("id", pagoId)
+  const folio = (p.ventas as unknown as { folio: string } | null)?.folio ?? ""
+  const quien = (p.personas as unknown as { nombre: string } | null)?.nombre ?? ""
+  await admin.from("bitacora").insert({
+    persona_id: sesion.personaId,
+    perfil: sesion.perfil,
+    area: "pagos",
+    accion: accion === "conciliar" ? `concilió ${moneda(Number(p.monto))} de ${folio} (${p.metodo})` : `recibió ${moneda(Number(p.monto))} en efectivo de ${quien} (${folio})`,
+    entidad: "venta",
+    entidad_id: p.venta_id,
+  })
+  return { ok: true as const }
 }
