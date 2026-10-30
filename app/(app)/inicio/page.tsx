@@ -5,9 +5,10 @@ import { AlertTriangle, ArrowRight, Plus, Store } from "lucide-react"
 import { GraficaVentasPlan } from "@/components/app/grafica-ventas-plan"
 import { KpiCard } from "@/components/app/kpi-card"
 import { Button } from "@/components/ui/button"
-import { alertas, PLAN_MES, ventasDiarias, ventasMes, ventasPorCanal } from "@/lib/demo"
+import { alertasDelDia, hoyEnCaja, recompraDelMes } from "@/lib/inicio"
 import { formatoMoneda, formatoPorcentaje } from "@/lib/format"
 import { navPara } from "@/lib/nav"
+import { mesActual, resumenMes } from "@/lib/reportes"
 import { obtenerSesion } from "@/lib/sesion"
 import { cn } from "@/lib/utils"
 
@@ -17,77 +18,92 @@ export default async function Inicio() {
   const sesion = await obtenerSesion()
   // Márgenes y alertas de pantallas solo del administrador no se muestran a otros perfiles.
   const esAdmin = sesion.perfil === "administrador"
-  const rutas = new Set(navPara(sesion.perfil).flatMap((g) => g.items.map((i) => i.href)))
-  const puedeVer = (href: string) => esAdmin || rutas.has(href)
-  const actual = ventasMes[ventasMes.length - 1].ventas
-  const avance = actual / PLAN_MES
-  const promedio = actual / ventasMes.length
-  const totalCanales = ventasPorCanal.reduce((s, c) => s + c.monto, 0)
-  const maxCanal = Math.max(...ventasPorCanal.map((c) => c.monto))
+  const rutas = new Set(navPara(sesion.perfil).flatMap((g) => g.items.map((i) => i.href.split("?")[0])))
+  const puedeVer = (href: string) => esAdmin || rutas.has(href.split("?")[0])
+  const mes = mesActual()
+  const [r, alertas, hoy, recompra] = await Promise.all([resumenMes(mes), alertasDelDia(), hoyEnCaja(), recompraDelMes()])
+
+  const avance = r.plan.meta ? r.ingreso / r.plan.meta : null
+  const diasMes = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5)), 0).getDate()
+  const diasQuedan = Math.max(diasMes - r.diario.length, 0)
+  const promedio = r.diario.length ? r.ingreso / r.diario.length : 0
+  const faltan = Math.max(r.plan.meta - r.ingreso, 0)
+  const vsAnterior = r.ingresoAnterior ? Math.round(((r.ingreso - r.ingresoAnterior) / r.ingresoAnterior) * 100) : null
+  const nombreMes = new Intl.DateTimeFormat("es-MX", { month: "long", timeZone: "America/Monterrey" }).format(new Date())
+  const fechaHoy = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Monterrey" }).format(new Date())
+  const totalCanales = r.porCanal.reduce((s, c) => s + c.monto, 0)
+  const maxCanal = Math.max(1, ...r.porCanal.map((c) => c.monto))
+  const visibles = alertas.filter((a) => puedeVer(a.href)).slice(0, 3)
 
   return (
     <>
       <div className="flex items-end gap-2.5">
         <div className="flex-1">
           <div className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
-            Miércoles 28 de octubre · caja abierta por Laura
+            {fechaHoy} · {hoy.caja ? `caja abierta${hoy.caja.por ? ` por ${hoy.caja.por}` : ""}` : "caja cerrada"}
           </div>
-          <h1 className="mt-1 text-[30px] leading-tight font-medium">Buenos días, {sesion.nombre}</h1>
+          <h1 className="mt-1 text-[30px] leading-tight font-medium">Hola, {sesion.nombre.split(" ")[0]}</h1>
         </div>
-        <Button variant="outline" size="lg">
-          <Plus aria-hidden />
-          Pedido para médico
-        </Button>
+        {esAdmin && (
+          <Button variant="outline" size="lg" asChild>
+            <Link href="/ventas">
+              <Plus aria-hidden />
+              Pedido para médico
+            </Link>
+          </Button>
+        )}
         <Button size="lg" asChild>
-          <Link href="/mostrador">
+          <Link href={sesion.perfil === "admin_comercial" ? "/vender" : "/mostrador"}>
             <Store aria-hidden />
-            Vender en mostrador
+            {sesion.perfil === "admin_comercial" ? "Vender" : "Vender en mostrador"}
           </Link>
         </Button>
       </div>
 
-      <section aria-label="Alertas" className="flex flex-col gap-2">
-        {alertas.filter((a) => puedeVer(a.href)).map((a) => (
-          <div key={a.titulo} className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-3">
-            <span
-              className={cn(
-                "inline-flex size-8 items-center justify-center rounded-[9px]",
-                a.tipo === "crit" ? "bg-crit-bg text-crit" : "bg-warn-bg text-warn",
-              )}
-            >
-              <AlertTriangle className="size-4" aria-hidden />
-            </span>
-            <div className="flex-1">
-              <b className="text-sm">{a.titulo}</b>
-              <div className="text-[11.5px] text-muted-foreground">{a.detalle}</div>
+      {visibles.length > 0 && (
+        <section aria-label="Alertas" className="flex flex-col gap-2">
+          {visibles.map((a) => (
+            <div key={a.titulo} className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-3">
+              <span className={cn("inline-flex size-8 items-center justify-center rounded-[9px]", a.tipo === "crit" ? "bg-crit-bg text-crit" : "bg-warn-bg text-warn")}>
+                <AlertTriangle className="size-4" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <b className="text-sm">{a.titulo}</b>
+                <div className="truncate text-[11.5px] text-muted-foreground">{a.detalle}</div>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={a.href}>
+                  {a.accion}
+                  <ArrowRight aria-hidden />
+                </Link>
+              </Button>
             </div>
-            <Button variant="outline" size="sm" asChild>
-              <Link href={a.href}>
-                {a.accion}
-                <ArrowRight aria-hidden />
-              </Link>
-            </Button>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      )}
 
-      <section aria-label="Indicadores" className="flex gap-3">
+      <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard
-          etiqueta="Ventas de octubre"
-          valor={formatoMoneda(actual)}
-          cambio="8% vs sep"
-          contexto={`Plan del mes ${formatoMoneda(PLAN_MES)} · ${formatoPorcentaje(avance)}`}
-          tendencia={ventasMes.slice(-14).map((d) => d.ventas)}
+          etiqueta={`Ventas de ${nombreMes}`}
+          valor={formatoMoneda(r.ingreso)}
+          cambio={vsAnterior === null ? undefined : `${Math.abs(vsAnterior)}% vs mes anterior`}
+          positivo={(vsAnterior ?? 0) >= 0}
+          contexto={r.plan.meta ? `Plan del mes ${formatoMoneda(r.plan.meta)}${avance !== null ? ` · ${formatoPorcentaje(avance)}` : ""}` : "Sin plan configurado"}
+          tendencia={r.diario.length > 1 ? r.diario.slice(-14).map((d) => d.ventas) : undefined}
         />
-        <KpiCard etiqueta="Ventas de hoy" valor="$4,600" cambio="3 ventas" contexto="Caja abierta por Laura" tendencia={ventasDiarias.slice(-7)} />
-        {esAdmin && <KpiCard etiqueta="Margen del mes" valor="46.8%" cambio="1.2 pts" contexto="Después de comisiones de la red" tendencia={[44, 45.1, 44.6, 45.9, 46.2, 46.1, 46.8]} />}
-        <KpiCard etiqueta="Recompra" valor="41%" cambio="meta 35%" contexto="15 recompras esta semana" tendencia={[33, 35, 34, 37, 38, 40, 41]} />
+        <KpiCard etiqueta="Ventas de hoy" valor={formatoMoneda(hoy.ventasHoy)} contexto={hoy.numHoy === 1 ? "1 venta" : `${hoy.numHoy} ventas`} tendencia={r.diario.length > 1 ? r.diario.slice(-7).map((d) => d.delDia) : undefined} />
+        {esAdmin && <KpiCard etiqueta="Margen del mes" valor={r.margenBruto === null ? "—" : formatoPorcentaje(r.margenBruto)} contexto="Ingreso sin IVA contra costo de cada lote" />}
+        <KpiCard etiqueta="Recompra" valor={recompra.tasa === null ? "—" : formatoPorcentaje(recompra.tasa)} contexto={recompra.tasa === null ? "aún no vence ningún aviso este mes" : `${recompra.recompraron} recompras este mes`} />
       </section>
 
-      <div className="flex items-stretch gap-3">
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row">
         <section className="flex min-w-0 flex-1 flex-col gap-1 rounded-2xl border bg-card px-[18px] pt-[18px] pb-2.5">
-          <h2 className="text-lg font-semibold">Vamos al {formatoPorcentaje(avance)} del plan con 3 días por delante</h2>
-          <p className="text-[12.5px] text-muted-foreground">Ventas acumuladas de octubre contra el plan (+5% sobre septiembre)</p>
+          <h2 className="text-lg font-semibold">
+            {avance === null ? "Ventas acumuladas del mes" : `Vamos al ${formatoPorcentaje(avance)} del plan${diasQuedan ? ` con ${diasQuedan === 1 ? "1 día" : `${diasQuedan} días`} por delante` : ""}`}
+          </h2>
+          <p className="text-[12.5px] text-muted-foreground">
+            Ventas acumuladas de {nombreMes} contra el plan{r.plan.sugerido && r.plan.meta ? " (sugerido: mes anterior +5%)" : ""}
+          </p>
           <div className="mt-2 flex gap-4 text-[11.5px] font-bold" aria-hidden>
             <span className="flex items-center gap-1.5">
               <i className="inline-block h-[3px] w-3.5 rounded bg-chart-1" />
@@ -98,20 +114,20 @@ export default async function Inicio() {
               Plan
             </span>
           </div>
-          <GraficaVentasPlan datos={ventasMes} />
+          {r.diario.length > 1 ? <GraficaVentasPlan datos={r.diario} /> : <p className="py-10 text-center text-[13px] text-muted-foreground">La gráfica aparece desde el segundo día del mes.</p>}
         </section>
-        <section className="flex w-[300px] flex-col gap-3 rounded-2xl border bg-card p-[18px]">
+        <section className="flex flex-col gap-3 rounded-2xl border bg-card p-[18px] lg:w-[300px]">
           <h2 className="text-lg font-semibold">Meta del mes</h2>
           <div className="relative mx-auto size-[132px]">
-            <Anillo valor={avance} />
+            <Anillo valor={avance ?? 0} />
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="num text-[28px] font-extrabold tracking-tight">{formatoPorcentaje(avance)}</span>
+              <span className="num text-[28px] font-extrabold tracking-tight">{avance === null ? "—" : formatoPorcentaje(avance)}</span>
               <span className="text-[11.5px] text-muted-foreground">del plan</span>
             </div>
           </div>
           <dl className="flex flex-col gap-1.5 rounded-xl bg-hueso-2 p-3 text-[12.5px]">
-            <Fila etiqueta="Faltan" valor={formatoMoneda(PLAN_MES - actual)} />
-            <Fila etiqueta="Por día (3 días)" valor={formatoMoneda((PLAN_MES - actual) / 3)} />
+            <Fila etiqueta="Faltan" valor={formatoMoneda(faltan)} />
+            <Fila etiqueta={`Por día (${diasQuedan === 1 ? "1 día" : `${diasQuedan} días`})`} valor={diasQuedan ? formatoMoneda(faltan / diasQuedan) : "—"} />
             <Fila etiqueta="Promedio diario" valor={formatoMoneda(promedio)} />
           </dl>
         </section>
@@ -119,10 +135,10 @@ export default async function Inicio() {
 
       <section className="flex flex-col gap-3 rounded-2xl border bg-card p-[18px]">
         <div>
-          <h2 className="text-lg font-semibold">El mostrador trae 6 de cada 10 pesos</h2>
-          <p className="text-[12.5px] text-muted-foreground">Ventas por canal · octubre</p>
+          <h2 className="text-lg font-semibold">{r.porCanal[0] ? `${r.porCanal[0].canal} trae ${formatoPorcentaje(r.porCanal[0].monto / totalCanales)} de las ventas` : "Ventas por canal"}</h2>
+          <p className="text-[12.5px] text-muted-foreground">Ventas por canal · {nombreMes}</p>
         </div>
-        {ventasPorCanal.map((c) => (
+        {r.porCanal.map((c) => (
           <div key={c.canal} className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2 text-[12.5px]">
               <b className="flex-1">{c.canal}</b>
@@ -134,6 +150,7 @@ export default async function Inicio() {
             </div>
           </div>
         ))}
+        {!r.porCanal.length && <p className="text-[13px] text-muted-foreground">Aún no hay ventas este mes.</p>}
       </section>
     </>
   )

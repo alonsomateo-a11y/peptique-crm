@@ -1,9 +1,11 @@
 import { Sidebar } from "@/components/app/sidebar"
 import { Topbar } from "@/components/app/topbar"
+import { pendientesMenu } from "@/lib/inicio"
 import { obtenerSesion } from "@/lib/sesion"
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const sesion = await obtenerSesion()
+  const pendientes = sesion.perfil === "administrador" || sesion.perfil === "admin_comercial" ? await pendientesMenu() : {}
   return (
     <div className="flex min-h-dvh">
       <a
@@ -16,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         perfil={sesion.perfil}
         nombre={sesion.nombre}
         iniciales={sesion.iniciales}
-        pendientes={{ "/red": 1, "/recompras": 6 }}
+        pendientes={pendientes}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
