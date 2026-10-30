@@ -6,6 +6,7 @@ import { Estado } from "@/components/app/estado"
 import { PageHeader } from "@/components/app/page-header"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatoMoneda } from "@/lib/format"
+import { ligaDocumentos } from "@/lib/documentos"
 import { exigirAdmin } from "@/lib/sesion"
 import { crearClienteServidor } from "@/lib/supabase/server"
 import { cn } from "@/lib/utils"
@@ -77,6 +78,7 @@ export default async function DetalleVenta({ params }: PageProps<"/ventas/[folio
             venta={{ id: v.id, folio: v.folio, estado: v.estado, porDosis, saldo, total: Number(v.total), pagado, de, pagadas, aplicadas, canal: v.canal }}
             cliente={v.clientes ? { nombre: v.clientes.nombre, whatsapp: v.clientes.whatsapp } : null}
             lotes={v.venta_partidas.map((p) => p.lotes?.codigo).filter((x): x is string => !!x)}
+            ligaDocumentos={v.estado === "cancelada" || v.estado === "esperando_pago" ? null : await ligaDocumentos(v.id)}
           />
         }
       />

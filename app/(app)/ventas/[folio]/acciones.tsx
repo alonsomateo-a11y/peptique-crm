@@ -37,7 +37,17 @@ type VentaAcciones = {
 const MOTIVOS = ["Producto dañado", "El cliente se arrepintió", "Error de captura", "Pago no recibido", "Otro"]
 const hoyMty = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Monterrey" }).format(new Date())
 
-export function AccionesVenta({ venta, cliente, lotes }: { venta: VentaAcciones; cliente: { nombre: string; whatsapp: string } | null; lotes: string[] }) {
+export function AccionesVenta({
+  venta,
+  cliente,
+  lotes,
+  ligaDocumentos,
+}: {
+  venta: VentaAcciones
+  cliente: { nombre: string; whatsapp: string } | null
+  lotes: string[]
+  ligaDocumentos: string | null
+}) {
   const [pagoAbierto, setPagoAbierto] = useState(false)
   const [cancelarAbierto, setCancelarAbierto] = useState(false)
   const [ocupado, iniciar] = useTransition()
@@ -54,9 +64,13 @@ export function AccionesVenta({ venta, cliente, lotes }: { venta: VentaAcciones;
 
   return (
     <div className="flex flex-wrap gap-2">
-      {cliente && (
+      {cliente && ligaDocumentos && (
         <Button variant="outline" size="lg" asChild>
-          <a href={ligaWhatsapp(cliente.whatsapp, `Hola ${cliente.nombre.split(" ")[0]}, te compartimos el COA de tu compra ${venta.folio}${lotes.length ? ` (lote ${[...new Set(lotes)].join(", ")})` : ""}.`)} target="_blank" rel="noopener noreferrer">
+          <a
+            href={ligaWhatsapp(cliente.whatsapp, `Hola ${cliente.nombre.split(" ")[0]}, aquí puedes ver el certificado de análisis (COA) de tu compra ${venta.folio}${lotes.length ? ` (lote ${[...new Set(lotes)].join(", ")})` : ""} y tu protocolo: ${ligaDocumentos}`)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             <MessageCircle aria-hidden />
             Reenviar COA
           </a>

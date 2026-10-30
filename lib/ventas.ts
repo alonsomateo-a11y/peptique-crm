@@ -37,6 +37,8 @@ export type VentaRegistrada = {
   /** Red: referencia para la transferencia (R0032-RS) y cuándo se libera el apartado. */
   referencia?: string | null
   vence?: string | null
+  /** Liga firmada a la página con el COA público y el protocolo (no aplica a la red hasta que se refleje el pago). */
+  ligaDocumentos?: string | null
   total: number
   cobrado: number
   cambio: number

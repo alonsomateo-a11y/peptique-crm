@@ -5,6 +5,7 @@ import { AlertTriangle, Check, Eye, FileText, Loader2, Save, Trash2, Upload } fr
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 import { aprobarCoa, guardarZonas, ligaOriginal, ligaPublico, subirOriginal, zonasSugeridas } from "./actions"
@@ -23,6 +24,7 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
   const [hechas, setHechas] = useState<string[]>([])
   const [ocupado, iniciar] = useTransition()
   const [listo, setListo] = useState(tienePublico)
+  const [confirmar, setConfirmar] = useState(false)
 
   useEffect(() => {
     if (!tieneOriginal || !tipoOriginal) return
@@ -61,7 +63,14 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
 
   const completas = ZONAS_REQUERIDAS.every((z) => hechas.includes(z.id))
 
+  // Pocas zonas suele significar que algo se quedó sin tapar: se pide una segunda mirada.
+  function pedirAprobar() {
+    if (zonas.length < ZONAS_REQUERIDAS.length) setConfirmar(true)
+    else aprobar()
+  }
+
   function aprobar() {
+    setConfirmar(false)
     if (!paginas) return
     iniciar(async () => {
       try {
@@ -196,7 +205,7 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
               <Save aria-hidden />
               Guardar borrador
             </Button>
-            <Button size="lg" disabled={ocupado || !paginas || !zonas.length || !completas} onClick={aprobar}>
+            <Button size="lg" disabled={ocupado || !paginas || !zonas.length || !completas} onClick={pedirAprobar}>
               {ocupado ? <Loader2 className="animate-spin" aria-hidden /> : <Check aria-hidden />}
               {listo ? "Volver a aprobar con estos cambios" : "Aprobar COA público"}
             </Button>
@@ -216,6 +225,33 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
                 Ver COA público
               </Button>
             )}
+            <Dialog open={confirmar} onOpenChange={setConfirmar}>
+              <DialogContent>
+                <DialogHeader>
+                  <span className="mb-1 inline-flex size-10 items-center justify-center rounded-xl bg-warn-bg text-warn">
+                    <AlertTriangle className="size-5" aria-hidden />
+                  </span>
+                  <DialogTitle>
+                    Marcaste {zonas.length} {zonas.length === 1 ? "zona" : "zonas"} y normalmente son {ZONAS_REQUERIDAS.length}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Revisa que estén tapados el proveedor y su sitio, el QR, la foto, el código de acceso y el link de verificación. Si una zona tapa dos datos juntos, está bien. Lo que no se tape lo verá el cliente.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setConfirmar(false)
+                      setVista("publico")
+                    }}
+                  >
+                    Revisar en vista pública
+                  </Button>
+                  <Button onClick={aprobar}>Ya revisé, aprobar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <p className="text-[11.5px] text-muted-foreground">Se genera un PDF nuevo: cada página es una imagen con las franjas ya pintadas, así que lo tapado no existe en el archivo. No lleva metadatos del original.</p>
           </div>
         </aside>

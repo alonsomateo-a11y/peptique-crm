@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import { formatoMonedaCentavos } from "@/lib/format"
+import { ligaDocumentos } from "@/lib/documentos"
 import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { normalizarWhatsapp, whatsappValido } from "@/lib/telefono"
@@ -126,6 +127,7 @@ export async function vender(datos: {
   }
   const r = await registrarVenta({ ...datos, vendedor: s })
   if (!r.ok) return { error: r.error }
+  if (!s.esRed) r.venta.ligaDocumentos = await ligaDocumentos(r.venta.ventaId)
   revalidatePath(s.esRed ? "/app" : "/mostrador", "layout")
   return { venta: r.venta }
 }

@@ -1149,7 +1149,7 @@ function Listo({
 }) {
   const [dosisAplicada, setDosisAplicada] = useState(false);
   const [aplicando, iniciar] = useTransition();
-  const mensaje = `Hola ${venta.cliente.nombre.split(" ")[0]}, gracias por tu compra en Peptique (${venta.folio}). Te compartimos el COA del lote ${venta.productos.map((p) => `${p.lote} (${p.nombre})`).join(", ")}${venta.productos.some((p) => p.tieneProtocolo) ? " y tu protocolo" : ""}.`;
+  const mensaje = `Hola ${venta.cliente.nombre.split(" ")[0]}, gracias por tu compra en Peptique (${venta.folio}). Aquí puedes ver el certificado de análisis (COA) del lote ${venta.productos.map((p) => `${p.lote} (${p.nombre})`).join(", ")}${venta.productos.some((p) => p.tieneProtocolo) ? " y tu protocolo" : ""}: ${venta.ligaDocumentos ?? ""}`.trim();
 
   return (
     <>

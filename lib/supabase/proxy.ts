@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-const RUTAS_PUBLICAS = ["/entrar", "/salir"]
+// /d/ son las ligas firmadas de documentos para el cliente (COA público y protocolo).
+const RUTAS_PUBLICAS = ["/entrar", "/salir", "/d/"]
 
 /** Refresca la sesión de Supabase y manda a /entrar si no hay sesión. */
 export async function actualizarSesion(request: NextRequest) {
