@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 import { Boxes, Info, Plus, Search } from "lucide-react"
 
@@ -142,7 +143,11 @@ export function InventarioVista({ lotes, productos, tipoCambio }: { lotes: LoteF
                       <BarraMargen valor={l.margen} />
                     </TableCell>
                     <TableCell>
-                      <Estado tipo={COA_ESTADO[l.coa]}>{NOMBRE_COA[l.coa]}</Estado>
+                      <Link href={`/inventario/coa/${l.id}`} className="rounded-full focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none" aria-label={`${NOMBRE_COA[l.coa]} · abrir COA de ${l.codigo}`}>
+                        <Estado tipo={COA_ESTADO[l.coa]} className="hover:ring-1 hover:ring-espresso">
+                          {NOMBRE_COA[l.coa]}
+                        </Estado>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 )
