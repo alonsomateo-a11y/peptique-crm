@@ -224,7 +224,7 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   // Avisos de recompra: el anterior se da por recomprado y se crea el de la siguiente etapa.
   const hoy = hoyMty()
   for (const id of ids) {
-    await admin.from("avisos_recompra").update({ estado: "recompro" }).eq("cliente_id", cliente.id).eq("producto_id", id).in("estado", ["por_avisar", "contactado"])
+    await admin.from("avisos_recompra").update({ estado: "recompro" }).eq("cliente_id", cliente.id).eq("producto_id", id).in("estado", ["por_avisar", "contactado", "sin_recompra"])
     const etapa = etapas.get(id) ?? 1
     const prot = protocolos?.find((x) => x.producto_id === id && x.etapa === etapa)
     if (prot?.duracion_dias) {
