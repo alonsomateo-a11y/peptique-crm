@@ -16,6 +16,15 @@ async function sesionVenta() {
   return PERFILES_MOSTRADOR.includes(s.perfil) && s.personaId !== "demo" ? s : null
 }
 
+/** Mostrador, admin comercial o la red. La red solo ve y vende a sus propios clientes. */
+async function sesionVendedor() {
+  const s = await obtenerSesion()
+  if (s.personaId === "demo") return null
+  if (PERFILES_MOSTRADOR.includes(s.perfil)) return { ...s, esRed: false }
+  if (s.perfil === "distribuidor" || s.perfil === "comisionista") return { ...s, esRed: true }
+  return null
+}
+
 const uuid = /^[0-9a-f-]{36}$/
 const SIN_SESION = { error: "Tu sesión no permite vender. Entra con tu PIN." }
 
@@ -34,24 +43,29 @@ export async function abrirCaja(fondo: number): Promise<{ error?: string }> {
 }
 
 export async function buscarClientes(q: string): Promise<ClienteMostrador[]> {
-  const s = await sesionVenta()
+  const s = await sesionVendedor()
   const texto = q.trim()
   if (!s || texto.length < 2) return []
   const admin = crearClienteAdmin()
   const digitos = texto.replace(/\D/g, "")
   const filtro = digitos.length >= 3 ? `whatsapp.ilike.%${digitos}%` : `nombre.ilike.%${texto.replace(/[%_,()]/g, "")}%`
-  const { data } = await admin.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").or(filtro).order("nombre").limit(8)
+  let consulta = admin.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").or(filtro)
+  if (s.esRed) consulta = consulta.eq("vendedor_id", s.personaId)
+  const { data } = await consulta.order("nombre").limit(8)
   return (data ?? []).map((c) => ({ id: c.id, nombre: c.nombre, whatsapp: c.whatsapp, tipo: c.tipo, waiver: !!c.waiver_firmado_en, planDosis: false }))
 }
 
 export async function clientePorId(id: string): Promise<ClienteMostrador | null> {
-  if (!(await sesionVenta()) || !uuid.test(id)) return null
-  const { data: c } = await crearClienteAdmin().from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").eq("id", id).maybeSingle()
+  const s = await sesionVendedor()
+  if (!s || !uuid.test(id)) return null
+  let consulta = crearClienteAdmin().from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").eq("id", id)
+  if (s.esRed) consulta = consulta.eq("vendedor_id", s.personaId)
+  const { data: c } = await consulta.maybeSingle()
   return c ? { id: c.id, nombre: c.nombre, whatsapp: c.whatsapp, tipo: c.tipo, waiver: !!c.waiver_firmado_en, planDosis: false } : null
 }
 
 export async function crearClienteRapido(datos: { nombre: string; whatsapp: string; tipo: string }): Promise<{ cliente?: ClienteMostrador; error?: string }> {
-  const s = await sesionVenta()
+  const s = await sesionVendedor()
   if (!s) return SIN_SESION
   const nombre = datos.nombre.trim().replace(/\s+/g, " ")
   const whatsapp = normalizarWhatsapp(datos.whatsapp)
@@ -59,27 +73,33 @@ export async function crearClienteRapido(datos: { nombre: string; whatsapp: stri
   if (nombre.length < 2) return { error: "Escribe el nombre completo." }
   if (!whatsappValido(whatsapp)) return { error: "WhatsApp de 10 dígitos." }
   const admin = crearClienteAdmin()
-  const { data, error } = await admin.from("clientes").insert({ nombre, whatsapp, tipo, origen: "QR del mostrador", acepta_whatsapp: true }).select("id, nombre, whatsapp, tipo").single()
-  if (error?.code === "23505") return { error: "Ya hay un cliente con ese WhatsApp. Búscalo." }
+  const { data, error } = await admin
+    .from("clientes")
+    .insert({ nombre, whatsapp, tipo, origen: s.esRed ? "Red comercial" : "QR del mostrador", acepta_whatsapp: true, vendedor_id: s.esRed ? s.personaId : null })
+    .select("id, nombre, whatsapp, tipo")
+    .single()
+  if (error?.code === "23505") return { error: s.esRed ? "Ese WhatsApp ya es cliente de Peptique. Pide al administrador que te lo asigne." : "Ya hay un cliente con ese WhatsApp. Búscalo." }
   if (error || !data) return { error: "No se pudo dar de alta." }
-  await admin.from("bitacora").insert({ persona_id: s.personaId, perfil: s.perfil, area: "clientes", accion: `dio de alta a ${nombre} en el mostrador`, entidad: "cliente", entidad_id: data.id })
+  await admin.from("bitacora").insert({ persona_id: s.personaId, perfil: s.perfil, area: "clientes", accion: `dio de alta a ${nombre} ${s.esRed ? "desde la red" : "en el mostrador"}`, entidad: "cliente", entidad_id: data.id })
   return { cliente: { ...data, waiver: false, planDosis: false } }
 }
 
 /** Waiver firmado: nombre escrito por el cliente + aceptación (la firma con el dedo es opcional). */
 export async function firmarWaiver(clienteId: string, nombre: string): Promise<{ error?: string }> {
-  const s = await sesionVenta()
+  const s = await sesionVendedor()
   if (!s) return SIN_SESION
   if (!uuid.test(clienteId) || nombre.trim().length < 4) return { error: "Escribe el nombre completo de quien firma." }
   const admin = crearClienteAdmin()
-  const { error } = await admin.from("clientes").update({ waiver_firmado_en: new Date().toISOString(), waiver_nombre: nombre.trim() }).eq("id", clienteId)
+  let cambio = admin.from("clientes").update({ waiver_firmado_en: new Date().toISOString(), waiver_nombre: nombre.trim() }).eq("id", clienteId)
+  if (s.esRed) cambio = cambio.eq("vendedor_id", s.personaId)
+  const { error } = await cambio
   if (error) return { error: "No se pudo guardar el waiver." }
-  await admin.from("bitacora").insert({ persona_id: s.personaId, perfil: s.perfil, area: "mostrador", accion: "registró el waiver firmado", entidad: "cliente", entidad_id: clienteId })
+  await admin.from("bitacora").insert({ persona_id: s.personaId, perfil: s.perfil, area: s.esRed ? "red" : "mostrador", accion: "registró el waiver firmado", entidad: "cliente", entidad_id: clienteId })
   return {}
 }
 
 export async function etapasCliente(clienteId: string): Promise<Record<string, number>> {
-  if (!(await sesionVenta()) || !uuid.test(clienteId)) return {}
+  if (!(await sesionVendedor()) || !uuid.test(clienteId)) return {}
   return Object.fromEntries(await etapasDelCliente(clienteId))
 }
 
@@ -92,15 +112,21 @@ export async function vender(datos: {
   recibido: number | null
   referencia: string | null
 }): Promise<{ venta?: VentaRegistrada; error?: string }> {
-  const s = await sesionVenta()
+  const s = await sesionVendedor()
   if (!s) return SIN_SESION
+  // La red siempre vende por su canal y solo a sus clientes.
+  if (s.esRed !== (datos.canal === "red")) return { error: "Este canal no corresponde a tu perfil." }
+  if (s.esRed) {
+    const { data: suyo } = await crearClienteAdmin().from("clientes").select("id").eq("id", datos.clienteId).eq("vendedor_id", s.personaId).maybeSingle()
+    if (!suyo) return { error: "Ese cliente no es tuyo." }
+  }
   if (datos.canal === "mostrador_caja") {
     const { data } = await crearClienteAdmin().from("cortes_caja").select("id").is("cerrada_en", null).limit(1).maybeSingle()
     if (!data) return { error: "La caja está cerrada. Ábrela para vender en caja." }
   }
   const r = await registrarVenta({ ...datos, vendedor: s })
   if (!r.ok) return { error: r.error }
-  revalidatePath("/mostrador", "layout")
+  revalidatePath(s.esRed ? "/app" : "/mostrador", "layout")
   return { venta: r.venta }
 }
 

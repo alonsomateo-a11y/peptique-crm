@@ -10,6 +10,8 @@ import { RedVista } from "./red-vista"
 
 export const metadata: Metadata = { title: "Red comercial" }
 
+const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
+
 export default async function Red() {
   const s = await sesionRedEscritorio()
   const red = await cargarRed(s.personaId)
@@ -22,7 +24,7 @@ export default async function Red() {
       <PageHeader
         ruta={[["Inicio", "/inicio"], ["Red comercial"]]}
         titulo="Red comercial"
-        descripcion={`${activos.filter((p) => p.perfil === "distribuidor").length} distribuidores · ${activos.filter((p) => p.perfil === "comisionista").length} comisionistas · comisiones fijas sobre la venta sin IVA`}
+        descripcion={`${plural(activos.filter((p) => p.perfil === "distribuidor").length, "distribuidor", "distribuidores")} · ${plural(activos.filter((p) => p.perfil === "comisionista").length, "comisionista", "comisionistas")} · comisiones fijas sobre la venta sin IVA`}
       />
       <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard etiqueta={`Vendido por la red · ${mes}`} valor={formatoMoneda(red.reduce((t, p) => t + p.vendidoMes, 0))} contexto="pagado y reflejado" />

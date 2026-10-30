@@ -28,7 +28,7 @@ export const iniciales = (nombre: string) =>
     .join("")
 
 export const inicioPorPerfil = (perfil: Perfil) =>
-  perfil === "administrador" || perfil === "admin_comercial" ? "/inicio" : perfil === "mostrador" || perfil === "temporal" ? "/mostrador" : "/vender"
+  perfil === "administrador" || perfil === "admin_comercial" ? "/inicio" : perfil === "mostrador" || perfil === "temporal" ? "/mostrador" : "/app"
 
 const dia = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: ZONA }).format(d)
 
