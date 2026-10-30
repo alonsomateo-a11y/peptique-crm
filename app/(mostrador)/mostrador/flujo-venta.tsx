@@ -33,15 +33,18 @@ export function FlujoVenta({
   recientes,
   waiver,
   clienteInicial,
+  soloEnPersona = false,
 }: {
   caja: Caja
   productos: ProductoMostrador[]
   recientes: ClienteMostrador[]
   waiver: string
   clienteInicial: string | null
+  /** Admin comercial: siempre vende en persona, sin caja. */
+  soloEnPersona?: boolean
 }) {
-  const [paso, setPaso] = useState<Paso>("donde")
-  const [canal, setCanal] = useState<Canal>("mostrador_caja")
+  const [paso, setPaso] = useState<Paso>(soloEnPersona ? "cliente" : "donde")
+  const [canal, setCanal] = useState<Canal>(soloEnPersona ? "en_persona" : "mostrador_caja")
   const [cliente, setCliente] = useState<ClienteMostrador | null>(null)
   const [etapas, setEtapas] = useState<Record<string, number>>({})
   const [carrito, setCarrito] = useState<Carrito>({})
@@ -76,8 +79,14 @@ export function FlujoVenta({
   // Desde la ficha del cliente (/mostrador?cliente=<id>) se salta la búsqueda.
   const [preCliente, setPreCliente] = useState<ClienteMostrador | null>(null)
   useEffect(() => {
-    if (clienteInicial) clientePorId(clienteInicial).then(setPreCliente)
-  }, [clienteInicial])
+    if (!clienteInicial) return
+    clientePorId(clienteInicial).then((c) => {
+      if (c && soloEnPersona) elegirCliente(c)
+      else setPreCliente(c)
+    })
+    // elegirCliente solo se usa al cargar el cliente inicial.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteInicial, soloEnPersona])
 
   const pasoNumero = paso === "cliente" || paso === "waiver" ? 1 : paso === "productos" ? 2 : paso === "cobro" ? 3 : 0
 
@@ -112,7 +121,7 @@ export function FlujoVenta({
           }}
         />
       )}
-      {paso === "cliente" && <PasoCliente recientes={recientes} canal={canal} onElegir={elegirCliente} onAtras={() => setPaso("donde")} cargando={ocupado} />}
+      {paso === "cliente" && <PasoCliente recientes={recientes} canal={canal} onElegir={elegirCliente} onAtras={soloEnPersona ? undefined : () => setPaso("donde")} cargando={ocupado} />}
       {paso === "waiver" && cliente && (
         <PasoWaiver
           cliente={cliente}
@@ -240,7 +249,7 @@ function PasoCliente({
   recientes: ClienteMostrador[]
   canal: Canal
   onElegir: (c: ClienteMostrador) => void
-  onAtras: () => void
+  onAtras?: () => void
   cargando: boolean
 }) {
   const [q, setQ] = useState("")
@@ -259,9 +268,11 @@ function PasoCliente({
   return (
     <>
       <div className="flex items-center gap-2">
-        <button type="button" onClick={onAtras} aria-label="Cambiar dónde vendes" className="inline-flex size-9 items-center justify-center rounded-xl border bg-card">
-          <ChevronLeft className="size-4" aria-hidden />
-        </button>
+        {onAtras && (
+          <button type="button" onClick={onAtras} aria-label="Cambiar dónde vendes" className="inline-flex size-9 items-center justify-center rounded-xl border bg-card">
+            <ChevronLeft className="size-4" aria-hidden />
+          </button>
+        )}
         <h1 className="flex-1 text-[22px] font-medium">¿Quién compra?</h1>
         <span className="rounded-full bg-hueso px-2.5 py-0.5 text-[11.5px] font-semibold">{canal === "mostrador_caja" ? "En caja" : "En persona"}</span>
       </div>
@@ -795,7 +806,7 @@ function TarjetaCliente({ cliente, onCambiar }: { cliente: ClienteMostrador; onC
 
 function Barra({ etiqueta, valor, children }: { etiqueta: string; valor: string; children: React.ReactNode }) {
   return (
-    <div className="sticky bottom-[76px] z-[5] -mx-4 mt-auto flex items-center gap-3 border-t bg-card/95 px-4 py-3 backdrop-blur sm:bottom-[92px]">
+    <div className="sticky bottom-[var(--barra-abajo,76px)] z-[5] -mx-4 mt-auto flex items-center gap-3 border-t bg-card/95 px-4 py-3 backdrop-blur sm:bottom-[var(--barra-abajo-sm,92px)]">
       <div className="flex-1">
         <span className="block text-[12px] text-muted-foreground">{etiqueta}</span>
         <b className="num text-[19px]">{valor}</b>

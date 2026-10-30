@@ -7,6 +7,7 @@ import { KpiCard } from "@/components/app/kpi-card"
 import { Button } from "@/components/ui/button"
 import { alertas, PLAN_MES, ventasDiarias, ventasMes, ventasPorCanal } from "@/lib/demo"
 import { formatoMoneda, formatoPorcentaje } from "@/lib/format"
+import { navPara } from "@/lib/nav"
 import { obtenerSesion } from "@/lib/sesion"
 import { cn } from "@/lib/utils"
 
@@ -14,6 +15,10 @@ export const metadata: Metadata = { title: "Inicio" }
 
 export default async function Inicio() {
   const sesion = await obtenerSesion()
+  // Márgenes y alertas de pantallas solo del administrador no se muestran a otros perfiles.
+  const esAdmin = sesion.perfil === "administrador"
+  const rutas = new Set(navPara(sesion.perfil).flatMap((g) => g.items.map((i) => i.href)))
+  const puedeVer = (href: string) => esAdmin || rutas.has(href)
   const actual = ventasMes[ventasMes.length - 1].ventas
   const avance = actual / PLAN_MES
   const promedio = actual / ventasMes.length
@@ -42,7 +47,7 @@ export default async function Inicio() {
       </div>
 
       <section aria-label="Alertas" className="flex flex-col gap-2">
-        {alertas.map((a) => (
+        {alertas.filter((a) => puedeVer(a.href)).map((a) => (
           <div key={a.titulo} className="flex items-center gap-3 rounded-xl border bg-card px-3.5 py-3">
             <span
               className={cn(
@@ -75,7 +80,7 @@ export default async function Inicio() {
           tendencia={ventasMes.slice(-14).map((d) => d.ventas)}
         />
         <KpiCard etiqueta="Ventas de hoy" valor="$4,600" cambio="3 ventas" contexto="Caja abierta por Laura" tendencia={ventasDiarias.slice(-7)} />
-        <KpiCard etiqueta="Margen del mes" valor="46.8%" cambio="1.2 pts" contexto="Después de comisiones de la red" tendencia={[44, 45.1, 44.6, 45.9, 46.2, 46.1, 46.8]} />
+        {esAdmin && <KpiCard etiqueta="Margen del mes" valor="46.8%" cambio="1.2 pts" contexto="Después de comisiones de la red" tendencia={[44, 45.1, 44.6, 45.9, 46.2, 46.1, 46.8]} />}
         <KpiCard etiqueta="Recompra" valor="41%" cambio="meta 35%" contexto="15 recompras esta semana" tendencia={[33, 35, 34, 37, 38, 40, 41]} />
       </section>
 
