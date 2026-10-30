@@ -42,16 +42,19 @@ export function AccionesVenta({
   cliente,
   lotes,
   ligaDocumentos,
+  esAdmin,
 }: {
   venta: VentaAcciones
   cliente: { nombre: string; whatsapp: string } | null
   lotes: string[]
   ligaDocumentos: string | null
+  /** El admin comercial solo puede reenviar el COA. */
+  esAdmin: boolean
 }) {
   const [pagoAbierto, setPagoAbierto] = useState(false)
   const [cancelarAbierto, setCancelarAbierto] = useState(false)
   const [ocupado, iniciar] = useTransition()
-  const activa = venta.estado !== "cancelada"
+  const activa = esAdmin && venta.estado !== "cancelada"
   const siguienteAplicar = Array.from({ length: venta.pagadas }, (_, i) => i + 1).find((n) => !venta.aplicadas.includes(n))
   const siguienteCobrar = venta.porDosis && venta.pagadas < venta.de ? venta.pagadas + 1 : null
 
@@ -88,7 +91,7 @@ export function AccionesVenta({
           Cobrar dosis {siguienteCobrar} · {formatoMoneda(Math.ceil(venta.total / venta.de))}
         </Button>
       )}
-      {venta.canal === "red" && (venta.estado === "esperando_pago" || venta.estado === "pagada") && (
+      {esAdmin && venta.canal === "red" && (venta.estado === "esperando_pago" || venta.estado === "pagada") && (
         <Button size="lg" asChild>
           <Link href="/pagos?pestana=red">{venta.estado === "pagada" ? "Entregar en Pagos" : "Ver en Pagos · red en camino"}</Link>
         </Button>
@@ -99,7 +102,7 @@ export function AccionesVenta({
           Registrar pago · {formatoMoneda(venta.saldo)}
         </Button>
       )}
-      {venta.estado === "pagada" && venta.canal !== "red" && (
+      {esAdmin && venta.estado === "pagada" && venta.canal !== "red" && (
         <Button size="lg" disabled={ocupado} onClick={() => correr(() => entregarVenta(venta.id, venta.folio), `${venta.folio} entregada`)}>
           <PackageCheck aria-hidden />
           Marcar entregada

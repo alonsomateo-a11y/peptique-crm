@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { descargarCsv } from "@/lib/csv"
 import { formatoMoneda } from "@/lib/format"
 
 import { agregarGasto, copiarGastos, guardarPlan, quitarGasto } from "./actions"
@@ -43,6 +44,7 @@ export function ControlesReportes({
   planMeses,
   baseSugerida,
   resumen,
+  abrirGastos = false,
 }: {
   mes: string
   mesActual: string
@@ -52,16 +54,16 @@ export function ControlesReportes({
   planMeses: { mes: string; meta: number | null; crecimiento: number }[]
   baseSugerida: number
   resumen: Resumen
+  abrirGastos?: boolean
 }) {
   const router = useRouter()
   const ruta = usePathname()
   const [plan, setPlan] = useState(false)
-  const [fijos, setFijos] = useState(false)
+  const [fijos, setFijos] = useState(abrirGastos)
   const meses = Array.from({ length: 12 }, (_, i) => mesMas(mesActual, -i))
 
   function descargar() {
-    const celda = (v: string | number | null) => `"${String(v ?? "").replace(/"/g, '""')}"`
-    const filas = [
+    const filas: (string | number | null)[][] = [
       ["Reporte", nombreMes(mes)],
       [],
       ["Estado de resultados"],
@@ -81,10 +83,7 @@ export function ControlesReportes({
       ["Persona", "Ventas con IVA"],
       ...resumen.porPersona.map((p) => [p.persona, p.monto]),
     ]
-    const csv = filas.map((f) => f.map((v) => celda(v as string | number)).join(",")).join("\r\n")
-    const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }))
-    Object.assign(document.createElement("a"), { href: url, download: `reporte-peptique-${mes}.csv` }).click()
-    URL.revokeObjectURL(url)
+    descargarCsv(`reporte-peptique-${mes}.csv`, filas)
   }
 
   return (

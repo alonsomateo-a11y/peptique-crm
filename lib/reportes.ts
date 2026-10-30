@@ -89,15 +89,20 @@ export async function resumenMes(mes: string) {
     return { date: new Date(`${d}T12:00:00-06:00`), ventas: acumulado, plan: Math.round((plan.meta * (i + 1)) / dias), delDia: porDia.get(d) ?? 0 }
   })
 
-  const agrupar = <K extends string>(clave: (v: VentaBd) => K) => {
-    const m = new Map<K, number>()
-    for (const v of ventas) m.set(clave(v), (m.get(clave(v)) ?? 0) + Number(v.total))
-    return [...m].map(([k, monto]) => ({ k, monto })).sort((a, b) => b.monto - a.monto)
+  const agrupar = (clave: (v: VentaBd) => string, etiqueta: (v: VentaBd) => string) => {
+    const m = new Map<string, { nombre: string; monto: number; ventas: number }>()
+    for (const v of ventas) {
+      const x = m.get(clave(v)) ?? { nombre: etiqueta(v), monto: 0, ventas: 0 }
+      x.monto += Number(v.total)
+      x.ventas++
+      m.set(clave(v), x)
+    }
+    return [...m].map(([k, x]) => ({ k, ...x })).sort((a, b) => b.monto - a.monto)
   }
 
-  const productos = new Map<string, { nombre: string; piezas: number; ingreso: number; costo: number }>()
+  const productos = new Map<string, { id: string; nombre: string; piezas: number; ingreso: number; costo: number }>()
   for (const p of partidas) {
-    const x = productos.get(p.producto_id) ?? { nombre: p.productos ? `${p.productos.nombre} ${p.productos.presentacion}` : "—", piezas: 0, ingreso: 0, costo: 0 }
+    const x = productos.get(p.producto_id) ?? { id: p.producto_id, nombre: p.productos ? `${p.productos.nombre} ${p.productos.presentacion}` : "—", piezas: 0, ingreso: 0, costo: 0 }
     x.piezas += p.cantidad
     x.ingreso += (p.cantidad * Number(p.precio_unitario)) / (1 + IVA)
     x.costo += p.cantidad * Number(p.lotes?.costo_pieza_mxn ?? 0)
@@ -119,8 +124,8 @@ export async function resumenMes(mes: string) {
     margenBruto: sinIva ? (sinIva - costo) / sinIva : null,
     plan,
     diario,
-    porCanal: agrupar((v) => CANAL[v.canal] ?? v.canal).map(({ k, monto }) => ({ canal: k, monto })),
-    porPersona: agrupar((v) => v.personas?.nombre ?? "—").map(({ k, monto }) => ({ persona: k, monto })),
+    porCanal: agrupar((v) => v.canal, (v) => CANAL[v.canal] ?? v.canal).map(({ k, nombre, monto, ventas: n }) => ({ clave: k, canal: nombre, monto, ventas: n })),
+    porPersona: agrupar((v) => v.vendedor_id, (v) => v.personas?.nombre ?? "—").map(({ k, nombre, monto, ventas: n }) => ({ id: k, persona: nombre, monto, ventas: n })),
     porProducto: [...productos.values()]
       .map((p) => ({ ...p, margen: p.ingreso ? (p.ingreso - p.costo) / p.ingreso : null }))
       .sort((a, b) => b.ingreso - a.ingreso),

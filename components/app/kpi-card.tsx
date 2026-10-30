@@ -1,8 +1,15 @@
-import { ArrowDown, ArrowUp } from "lucide-react"
+import Link from "next/link"
+import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-/** Tarjeta de KPI estilo metric-card: etiqueta, cambio, número, sparkline y contexto. */
+import { Ayuda } from "./ayuda"
+
+/**
+ * Tarjeta de KPI estilo metric-card: etiqueta, cambio, número, sparkline y contexto.
+ * Con `href` toda la tarjeta lleva al detalle que justifica el número; con `ayuda` explica
+ * cómo se calcula y de dónde sale.
+ */
 export function KpiCard({
   etiqueta,
   valor,
@@ -11,6 +18,8 @@ export function KpiCard({
   contexto,
   tendencia,
   className,
+  href,
+  ayuda,
 }: {
   etiqueta: string
   valor: string
@@ -19,12 +28,28 @@ export function KpiCard({
   contexto?: string
   tendencia?: number[]
   className?: string
+  /** Lista filtrada con los registros que suman este número. */
+  href?: string
+  /** Cómo se calcula y de dónde sale. */
+  ayuda?: string
 }) {
   const Flecha = positivo ? ArrowUp : ArrowDown
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col gap-1.5 rounded-2xl border bg-card px-[18px] py-4 shadow-[0_1px_2px_rgb(43_38_34/0.04)]", className)}>
+    <div
+      className={cn(
+        "relative flex min-w-0 flex-1 flex-col gap-1.5 rounded-2xl border bg-card px-[18px] py-4 shadow-[0_1px_2px_rgb(43_38_34/0.04)]",
+        href && "transition-colors focus-within:ring-3 focus-within:ring-ring hover:border-espresso",
+        className,
+      )}
+    >
       <div className="flex items-center gap-2">
-        <span className="flex-1 text-xs font-semibold text-muted-foreground">{etiqueta}</span>
+        {href ? (
+          <Link href={href} className="flex-1 text-xs font-semibold text-muted-foreground outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']">
+            {etiqueta}
+          </Link>
+        ) : (
+          <span className="flex-1 text-xs font-semibold text-muted-foreground">{etiqueta}</span>
+        )}
         {cambio && (
           <span
             className={cn(
@@ -36,12 +61,18 @@ export function KpiCard({
             {cambio}
           </span>
         )}
+        {ayuda && <Ayuda texto={ayuda} />}
       </div>
       <div className="flex items-end gap-2.5">
         <span className="num text-[25px] leading-tight font-bold tracking-tight whitespace-nowrap">{valor}</span>
-        {tendencia && tendencia.length > 1 && <Sparkline valores={tendencia} className="ml-auto" />}
+        {tendencia && tendencia.length > 1 && <Sparkline valores={tendencia} className="ml-auto hidden min-[440px]:block" />}
       </div>
       {contexto && <span className="text-[11.5px] text-muted-foreground">{contexto}</span>}
+      {href && (
+        <span className="mt-auto inline-flex items-center gap-1 pt-0.5 text-[11.5px] font-semibold text-chart-1" aria-hidden>
+          Ver detalle <ArrowRight className="size-3" />
+        </span>
+      )}
     </div>
   )
 }

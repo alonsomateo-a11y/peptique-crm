@@ -17,6 +17,8 @@ export type VentaFila = {
   id: string
   folio: string
   creado_en: string
+  /** Día en hora de Monterrey (YYYY-MM-DD). */
+  dia: string
   canal: CanalVenta
   estado: EstadoVenta
   porDosis: boolean
@@ -28,8 +30,16 @@ export type VentaFila = {
   vendedorId: string
   vendedor: string
   productos: string
+  /** Por producto (sumado entre lotes): para filtrar y para justificar montos por producto. */
+  partidas: { productoId: string; nombre: string; cantidad: number; importe: number }[]
   etiquetas: string[]
 }
+
+/** Filtros que llegan en la liga (desde Inicio, Reportes, etc.). */
+export type FiltrosVentas = { q?: string; canal?: string; estado?: string; vendedor?: string; mes?: string; dia?: string; producto?: string; desde?: string }
+
+/** Las ventas que cuentan en Inicio y Reportes: sin canceladas ni esperando el pago de la red. */
+export const cuentaParaReportes = (e: EstadoVenta) => e !== "cancelada" && e !== "esperando_pago"
 
 export type Resultado = { ok?: boolean; error?: string; folio?: string } | null
 

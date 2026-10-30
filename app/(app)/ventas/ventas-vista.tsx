@@ -14,23 +14,45 @@ import { cn } from "@/lib/utils"
 
 import type { ClienteMostrador, ProductoMostrador } from "../../(mostrador)/mostrador/tipos"
 import { PedidoDrawer } from "./pedido-drawer"
-import { ligaVenta, NOMBRE_CANAL, NOMBRE_ESTADO, TIPO_ESTADO, type EstadoVenta, type VentaFila } from "./tipos"
+import { cuentaParaReportes, ligaVenta, NOMBRE_CANAL, NOMBRE_ESTADO, TIPO_ESTADO, type EstadoVenta, type FiltrosVentas, type VentaFila } from "./tipos"
 
 const COLUMNAS: EstadoVenta[] = ["esperando_pago", "por_cobrar", "pagada", "entregada"]
 const TODOS = "todos"
 
-export function VentasVista({ ventas, productos, clientes }: { ventas: VentaFila[]; productos: ProductoMostrador[]; clientes: ClienteMostrador[] }) {
+export function VentasVista({
+  ventas,
+  productos,
+  clientes,
+  inicial = {},
+  truncado = false,
+  puedeCrear = true,
+}: {
+  ventas: VentaFila[]
+  productos: ProductoMostrador[]
+  clientes: ClienteMostrador[]
+  inicial?: FiltrosVentas
+  truncado?: boolean
+  /** Solo el administrador crea pedidos. */
+  puedeCrear?: boolean
+}) {
   const [vista, setVista] = useState<"lista" | "tablero">("lista")
-  const [q, setQ] = useState("")
-  const [canal, setCanal] = useState(TODOS)
-  const [estado, setEstado] = useState(TODOS)
-  const [vendedor, setVendedor] = useState(TODOS)
-  const [mes, setMes] = useState(TODOS)
+  const [q, setQ] = useState(inicial.q ?? "")
+  const [canal, setCanal] = useState(inicial.canal ?? TODOS)
+  const [estado, setEstado] = useState(inicial.estado ?? TODOS)
+  const [vendedor, setVendedor] = useState(inicial.vendedor ?? TODOS)
+  const [mes, setMes] = useState(inicial.mes ?? TODOS)
+  const [producto, setProducto] = useState(inicial.producto ?? TODOS)
+  const [dia, setDia] = useState(inicial.dia ?? "")
+  const [desde, setDesde] = useState(inicial.desde ?? "")
   const [abierto, setAbierto] = useState(false)
   const [vuelta, setVuelta] = useState(0)
 
   const vendedores = useMemo(() => [...new Map(ventas.map((v) => [v.vendedorId, v.vendedor])).entries()].sort((a, b) => a[1].localeCompare(b[1], "es")), [ventas])
-  const meses = useMemo(() => [...new Set(ventas.map((v) => v.creado_en.slice(0, 7)))].sort().reverse(), [ventas])
+  const meses = useMemo(() => [...new Set(ventas.map((v) => v.dia.slice(0, 7)))].sort().reverse(), [ventas])
+  const productosVendidos = useMemo(
+    () => [...new Map(ventas.flatMap((v) => v.partidas.map((p) => [p.productoId, p.nombre] as const))).entries()].sort((a, b) => a[1].localeCompare(b[1], "es")),
+    [ventas],
+  )
 
   const filas = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -38,11 +60,28 @@ export function VentasVista({ ventas, productos, clientes }: { ventas: VentaFila
       (v) =>
         (!t || `${v.folio} ${v.cliente} ${v.productos}`.toLowerCase().includes(t)) &&
         (canal === TODOS || v.canal === canal) &&
-        (estado === TODOS || v.estado === estado || (estado === "con_saldo" && v.saldo > 0)) &&
+        (estado === TODOS || v.estado === estado || (estado === "con_saldo" && v.saldo > 0 && v.estado !== "esperando_pago") || (estado === "validas" && cuentaParaReportes(v.estado))) &&
         (vendedor === TODOS || v.vendedorId === vendedor) &&
-        (mes === TODOS || v.creado_en.slice(0, 7) === mes),
+        (mes === TODOS || v.dia.slice(0, 7) === mes) &&
+        (!dia || v.dia === dia) &&
+        (producto === TODOS || v.partidas.some((p) => p.productoId === producto)),
     )
-  }, [ventas, q, canal, estado, vendedor, mes])
+  }, [ventas, q, canal, estado, vendedor, mes, dia, producto])
+
+  const total = filas.reduce((s, v) => s + v.total, 0)
+  const saldo = filas.reduce((s, v) => s + v.saldo, 0)
+  const delProducto = producto === TODOS ? null : filas.flatMap((v) => v.partidas).filter((p) => p.productoId === producto)
+  const hayFiltros = q.trim() || canal !== TODOS || estado !== TODOS || vendedor !== TODOS || mes !== TODOS || dia || producto !== TODOS
+  function limpiar() {
+    setQ("")
+    setCanal(TODOS)
+    setEstado(TODOS)
+    setVendedor(TODOS)
+    setMes(TODOS)
+    setDia("")
+    setProducto(TODOS)
+    setDesde("")
+  }
 
   function nuevoPedido() {
     setVuelta((v) => v + 1)
@@ -66,15 +105,51 @@ export function VentasVista({ ventas, productos, clientes }: { ventas: VentaFila
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Folio, cliente o producto" aria-label="Buscar ventas" className="h-9 bg-card pl-9" />
         </div>
         <Filtro etiqueta="Canal" valor={canal} onChange={setCanal} opciones={Object.entries(NOMBRE_CANAL)} />
-        {vista === "lista" && <Filtro etiqueta="Estado" valor={estado} onChange={setEstado} opciones={[["con_saldo", "Con saldo"], ...Object.entries(NOMBRE_ESTADO)]} />}
+        {vista === "lista" && <Filtro etiqueta="Estado" valor={estado} onChange={setEstado} opciones={[["validas", "Cuentan para reportes"], ["con_saldo", "Con saldo"], ...Object.entries(NOMBRE_ESTADO)]} />}
         <Filtro etiqueta="Vendedor" valor={vendedor} onChange={setVendedor} opciones={vendedores} />
         <Filtro etiqueta="Mes" valor={mes} onChange={setMes} opciones={meses.map((m) => [m, nombreMes(m)])} />
+        <Filtro etiqueta="Producto" valor={producto} onChange={setProducto} opciones={productosVendidos} />
         <div className="flex-1" />
-        <Button size="lg" onClick={nuevoPedido}>
-          <Plus aria-hidden />
-          Nuevo pedido
-        </Button>
+        {puedeCrear && (
+          <Button size="lg" onClick={nuevoPedido}>
+            <Plus aria-hidden />
+            Nuevo pedido
+          </Button>
+        )}
       </div>
+
+      {ventas.length > 0 && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border bg-hueso-2 px-3.5 py-2.5 text-[13px]">
+          {desde && (
+            <span className="font-semibold">
+              Detalle de: <b>{desde}</b>
+            </span>
+          )}
+          <span>
+            {hayFiltros ? "Viendo" : "Todas las ventas"}: <b>{filas.length === 1 ? "1 venta" : `${filas.length} ventas`}</b> · total <b className="num">{formatoMoneda(total)}</b>
+            {saldo > 0 && (
+              <>
+                {" "}
+                · saldo <b className="num text-crit">{formatoMoneda(saldo)}</b>
+              </>
+            )}
+          </span>
+          {delProducto && (
+            <span>
+              · de este producto: <b className="num">{delProducto.reduce((s, p) => s + p.cantidad, 0)} pzas</b> por <b className="num">{formatoMoneda(delProducto.reduce((s, p) => s + p.importe, 0))}</b> con IVA (
+              {formatoMoneda(delProducto.reduce((s, p) => s + p.importe, 0) / 1.16)} sin IVA)
+            </span>
+          )}
+          {dia && <span className="rounded-full bg-card px-2 py-0.5 text-[12px] font-semibold">Día {formatoFecha(new Date(`${dia}T12:00:00-06:00`))}</span>}
+          {estado === "validas" && <span className="text-[12px] text-muted-foreground">Sin canceladas ni ventas de la red esperando pago</span>}
+          {hayFiltros && (
+            <button type="button" onClick={limpiar} className="ml-auto text-[12.5px] font-semibold text-chart-1 hover:underline">
+              Quitar filtros
+            </button>
+          )}
+        </div>
+      )}
+      {truncado && <p className="text-[12px] font-semibold text-warn">Se muestran las 5,000 ventas más recientes.</p>}
 
       {ventas.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed bg-card px-6 py-14 text-center">

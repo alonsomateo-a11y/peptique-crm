@@ -21,8 +21,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         pendientes={pendientes}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
-        <main id="contenido" className="flex flex-col gap-4 px-6 py-[22px]">
+        <Topbar menu={{ perfil: sesion.perfil, nombre: sesion.nombre, iniciales: sesion.iniciales, pendientes }} />
+        <main id="contenido" className="flex min-w-0 flex-col gap-4 px-4 py-[22px] md:px-6">
           {children}
         </main>
       </div>

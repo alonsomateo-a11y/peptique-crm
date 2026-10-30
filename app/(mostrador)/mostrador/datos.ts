@@ -1,12 +1,13 @@
 import "server-only"
 
 import { crearClienteAdmin } from "@/lib/supabase/admin"
-import { precioPara } from "@/lib/ventas"
+import { liberarApartadosVencidos, precioPara } from "@/lib/ventas"
 
 import type { Caja, ClienteMostrador, ProductoMostrador } from "./tipos"
 
 /** Datos del mostrador. Se leen con la llave secreta y solo salen campos sin costos. */
 export async function cargarMostrador(): Promise<{ caja: Caja; productos: ProductoMostrador[]; recientes: ClienteMostrador[]; waiver: string }> {
+  await liberarApartadosVencidos()
   const admin = crearClienteAdmin()
   const [caja, productos, lotes, existencias, ventas, config] = await Promise.all([
     admin.from("cortes_caja").select("id, fondo, abierta_en, personas:abierta_por(nombre)").is("cerrada_en", null).order("abierta_en", { ascending: false }).limit(1).maybeSingle(),

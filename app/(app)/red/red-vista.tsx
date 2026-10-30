@@ -60,7 +60,7 @@ export function RedVista({ red, esAdmin }: { red: MiembroRed[]; esAdmin: boolean
       </div>
 
       {porAprobar.length > 0 && (
-        <section aria-label="Altas por aprobar" className="flex flex-col gap-2 rounded-2xl border bg-card p-4">
+        <section id="altas" aria-label="Altas por aprobar" className="flex scroll-mt-4 flex-col gap-2 rounded-2xl border bg-card p-4">
           <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             <AlertTriangle className="size-4 text-warn" aria-hidden />
             {porAprobar.length === 1 ? "1 alta por aprobar" : `${porAprobar.length} altas por aprobar`}

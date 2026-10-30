@@ -7,8 +7,9 @@ import { PageHeader } from "@/components/app/page-header"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatoMoneda } from "@/lib/format"
 import { ligaDocumentos } from "@/lib/documentos"
-import { exigirAdmin } from "@/lib/sesion"
-import { crearClienteServidor } from "@/lib/supabase/server"
+import { inicioPorPerfil, obtenerSesion } from "@/lib/sesion"
+import { redirect } from "next/navigation"
+import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { cn } from "@/lib/utils"
 
 import { NOMBRE_CANAL, NOMBRE_ESTADO, TIPO_ESTADO, type CanalVenta, type EstadoVenta } from "../tipos"
@@ -30,9 +31,11 @@ const ESTADO_PAGO: Record<string, [string, "ok" | "warn" | "crit" | "neutro"]> =
 }
 
 export default async function DetalleVenta({ params }: PageProps<"/ventas/[folio]">) {
-  await exigirAdmin()
+  const sesion = await obtenerSesion()
+  if (sesion.perfil !== "administrador" && sesion.perfil !== "admin_comercial") redirect(inicioPorPerfil(sesion.perfil))
   const folio = decodeURIComponent((await params).folio)
-  const supabase = await crearClienteServidor()
+  // Llave secreta: el admin comercial también ve el detalle (sin costos); la página ya validó el perfil.
+  const supabase = crearClienteAdmin()
   const { data } = await supabase
     .from("ventas")
     .select(
@@ -78,6 +81,7 @@ export default async function DetalleVenta({ params }: PageProps<"/ventas/[folio
             venta={{ id: v.id, folio: v.folio, estado: v.estado, porDosis, saldo, total: Number(v.total), pagado, de, pagadas, aplicadas, canal: v.canal }}
             cliente={v.clientes ? { nombre: v.clientes.nombre, whatsapp: v.clientes.whatsapp } : null}
             lotes={v.venta_partidas.map((p) => p.lotes?.codigo).filter((x): x is string => !!x)}
+            esAdmin={sesion.perfil === "administrador"}
             ligaDocumentos={v.estado === "cancelada" || v.estado === "esperando_pago" ? null : await ligaDocumentos(v.id)}
           />
         }

@@ -15,7 +15,7 @@ export async function cargarClientes(): Promise<{ clientes: ClienteFila[]; indic
   const supabase = await crearClienteServidor()
   const [clientes, ventas, personas] = await Promise.all([
     supabase.from("clientes").select("*").order("nombre"),
-    supabase.from("ventas").select("cliente_id, total, creado_en, estado").neq("estado", "cancelada"),
+    supabase.from("ventas").select("cliente_id, total, creado_en, estado").not("estado", "in", "(cancelada,esperando_pago)"),
     supabase.from("personas").select("id, nombre"),
   ])
   if (clientes.error) throw clientes.error

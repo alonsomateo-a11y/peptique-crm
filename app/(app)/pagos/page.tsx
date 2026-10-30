@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 
 import { KpiCard } from "@/components/app/kpi-card"
 import { PageHeader } from "@/components/app/page-header"
-import { formatoMoneda } from "@/lib/format"
+import { diaMty, formatoMoneda } from "@/lib/format"
 import type { Perfil } from "@/lib/perfiles"
 import { exigirAdmin } from "@/lib/sesion"
 import { crearClienteServidor } from "@/lib/supabase/server"
@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Pagos" }
 const horasHasta = (iso: string | null) => (iso ? (Date.parse(iso) - Date.now()) / 3_600_000 : null)
 
 export default async function Pagos({ searchParams }: PageProps<"/pagos">) {
-  const { pestana } = await searchParams
+  const { pestana, mes: mesFiltro } = await searchParams
   await exigirAdmin()
   await liberarApartadosVencidos()
   const supabase = await crearClienteServidor()
@@ -84,6 +84,7 @@ export default async function Pagos({ searchParams }: PageProps<"/pagos">) {
     referencia: p.referencia,
     dosis: p.numero_dosis,
     creado_en: p.creado_en,
+    dia: diaMty(p.creado_en),
     folio: p.ventas?.folio ?? "—",
     cliente: p.ventas?.clientes?.nombre ?? "—",
     cobro: p.personas?.nombre ?? "—",
@@ -120,7 +121,7 @@ export default async function Pagos({ searchParams }: PageProps<"/pagos">) {
 
   const mes = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Monterrey" }).format(new Date()).slice(0, 7)
   const nombreMes = new Intl.DateTimeFormat("es-MX", { month: "long", timeZone: "America/Monterrey" }).format(new Date())
-  const delMes = filas.filter((p) => p.estado !== "devolucion" && p.creado_en.slice(0, 7) === mes)
+  const delMes = filas.filter((p) => p.estado !== "devolucion" && p.dia.slice(0, 7) === mes)
   const porConciliar = filas.filter((p) => p.estado === "por_conciliar")
   const porEntregar = filas.filter((p) => p.estado === "por_entregar")
   const quienes = [...new Set(porEntregar.map((p) => p.cobro))]
@@ -131,9 +132,27 @@ export default async function Pagos({ searchParams }: PageProps<"/pagos">) {
     <>
       <PageHeader ruta={[["Inicio", "/inicio"], ["Pagos"]]} titulo="Pagos" descripcion="Quién cobró, cómo, dónde y con qué perfil" />
       <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard etiqueta={`Cobrado · ${nombreMes}`} valor={formatoMoneda(totalMes)} contexto={delMes.length === 1 ? "1 pago" : `${delMes.length} pagos`} />
-        <KpiCard etiqueta="Por conciliar" valor={formatoMoneda(porConciliar.reduce((s, p) => s + p.monto, 0))} contexto="tarjeta y transferencias sin revisar" />
-        <KpiCard etiqueta="Efectivo por entregar" valor={formatoMoneda(porEntregar.reduce((s, p) => s + p.monto, 0))} contexto={quienes.length ? quienes.join(", ") : "nadie debe efectivo"} />
+        <KpiCard
+          etiqueta={`Cobrado · ${nombreMes}`}
+          valor={formatoMoneda(totalMes)}
+          contexto={delMes.length === 1 ? "1 pago" : `${delMes.length} pagos`}
+          href={`/pagos?mes=${mes}`}
+          ayuda="Suma de los pagos registrados este mes (hora de Monterrey), de cualquier venta y método. No cuenta devoluciones. Es dinero cobrado, no ventas: un plan por dosis suma aquí cada abono."
+        />
+        <KpiCard
+          etiqueta="Por conciliar"
+          valor={formatoMoneda(porConciliar.reduce((s, p) => s + p.monto, 0))}
+          contexto="tarjeta y transferencias sin revisar"
+          href="/pagos?pestana=por_conciliar"
+          ayuda="Pagos con tarjeta o transferencia que nadie ha confirmado todavía contra el banco o la terminal."
+        />
+        <KpiCard
+          etiqueta="Efectivo por entregar"
+          valor={formatoMoneda(porEntregar.reduce((s, p) => s + p.monto, 0))}
+          contexto={quienes.length ? quienes.join(", ") : "nadie debe efectivo"}
+          href="/pagos?pestana=por_entregar"
+          ayuda="Efectivo cobrado en ventas en persona que esa persona todavía no entrega en el mostrador."
+        />
         <div className="flex min-w-0 flex-col gap-2 rounded-2xl border bg-card px-[18px] py-4">
           <span className="text-xs font-semibold text-muted-foreground">Cómo pagan · {nombreMes}</span>
           {totalMes > 0 ? (
@@ -157,7 +176,14 @@ export default async function Pagos({ searchParams }: PageProps<"/pagos">) {
           )}
         </div>
       </section>
-      <PagosVista pagos={filas} planes={listaPlanes} red={ventasRed} pestanaInicial={typeof pestana === "string" ? pestana : undefined} />
+      <PagosVista
+        key={`${pestana ?? ""}-${mesFiltro ?? ""}`}
+        pagos={filas}
+        planes={listaPlanes}
+        red={ventasRed}
+        pestanaInicial={typeof pestana === "string" ? pestana : undefined}
+        mesInicial={typeof mesFiltro === "string" && /^\d{4}-\d{2}$/.test(mesFiltro) ? mesFiltro : undefined}
+      />
     </>
   )
 }

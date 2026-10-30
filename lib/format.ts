@@ -36,3 +36,11 @@ export function formatoCuando(d: Date, ahora = new Date()) {
   if (dias < 7) return `${diaSemana.format(d).replace(".", "")} ${hora.format(d)}`
   return fechaMty.format(d).replace(".", "")
 }
+
+const diaClave = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Monterrey" })
+/** "2026-10-31" en hora de Monterrey: así se agrupa por día y por mes en todo el CRM. */
+export const diaMty = (iso: string | Date) => diaClave.format(typeof iso === "string" ? new Date(iso) : iso)
+
+const mesLargo = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric", timeZone: "UTC" })
+/** "2026-10" → "octubre de 2026". */
+export const nombreDeMes = (mes: string) => mesLargo.format(new Date(`${mes}-15T00:00:00Z`))

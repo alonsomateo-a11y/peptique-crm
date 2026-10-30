@@ -1,24 +1,23 @@
 import Link from "next/link"
-import { Search, Store } from "lucide-react"
+import { Store } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import type { Perfil } from "@/lib/perfiles"
 
-export function Topbar() {
+import { Busqueda } from "./busqueda"
+import { MenuMovil } from "./menu-movil"
+
+export function Topbar({ menu }: { menu: { perfil: Perfil; nombre: string; iniciales: string; pendientes?: Record<string, number> } }) {
+  const buscador = menu.perfil === "administrador" || menu.perfil === "admin_comercial"
   return (
-    <header className="flex h-14 items-center gap-2.5 border-b px-6">
-      <button
-        type="button"
-        className="flex h-9 w-[380px] max-w-full items-center gap-2 rounded-[10px] border bg-card px-3 text-[13px] text-muted-foreground"
-      >
-        <Search className="size-4" aria-hidden />
-        Buscar clientes, ventas, lotes…
-        <kbd className="ml-auto rounded-[5px] border bg-hueso-2 px-1.5 text-[11px]">⌘K</kbd>
-      </button>
-      <div className="flex-1" />
+    <header className="sticky top-0 z-20 flex h-14 items-center gap-2.5 border-b bg-background/95 px-4 backdrop-blur md:px-6">
+      <MenuMovil {...menu} />
+      {buscador ? <Busqueda /> : <div className="flex-1" />}
+      <div className="hidden flex-1 sm:block" />
       <Button variant="outline" size="lg" asChild>
-        <Link href="/mostrador">
+        <Link href="/mostrador" aria-label="Abrir mostrador">
           <Store aria-hidden />
-          Abrir mostrador
+          <span className="hidden sm:inline">Abrir mostrador</span>
         </Link>
       </Button>
     </header>

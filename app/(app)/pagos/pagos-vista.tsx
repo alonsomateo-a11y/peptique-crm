@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { formatoCuando, formatoMoneda } from "@/lib/format"
+import { formatoCuando, formatoMoneda, nombreDeMes } from "@/lib/format"
 import { PERFIL_INFO, PERFILES, type Perfil } from "@/lib/perfiles"
 import { cn } from "@/lib/utils"
 
@@ -27,6 +27,8 @@ export type PagoFila = {
   referencia: string | null
   dosis: number | null
   creado_en: string
+  /** Día en hora de Monterrey (YYYY-MM-DD). */
+  dia: string
   folio: string
   cliente: string
   cobro: string
@@ -48,14 +50,29 @@ const ESTADO: Record<string, [string, "ok" | "warn" | "crit" | "neutro"]> = {
 }
 
 type Pestana = "todos" | "red" | "por_conciliar" | "por_entregar" | "planes" | "devolucion"
+const PESTANAS_VALIDAS: Pestana[] = ["todos", "red", "por_conciliar", "por_entregar", "planes", "devolucion"]
 const TODOS = "todos"
 
-export function PagosVista({ pagos, planes, red, pestanaInicial }: { pagos: PagoFila[]; planes: PlanFila[]; red: VentaRed[]; pestanaInicial?: string }) {
-  const [pestana, setPestana] = useState<Pestana>(pestanaInicial === "red" ? "red" : "todos")
+export function PagosVista({
+  pagos,
+  planes,
+  red,
+  pestanaInicial,
+  mesInicial,
+}: {
+  pagos: PagoFila[]
+  planes: PlanFila[]
+  red: VentaRed[]
+  pestanaInicial?: string
+  mesInicial?: string
+}) {
+  const [pestana, setPestana] = useState<Pestana>(PESTANAS_VALIDAS.includes(pestanaInicial as Pestana) ? (pestanaInicial as Pestana) : "todos")
   const [q, setQ] = useState("")
   const [metodo, setMetodo] = useState(TODOS)
   const [lugar, setLugar] = useState(TODOS)
   const [perfil, setPerfil] = useState(TODOS)
+  const [mes, setMes] = useState(mesInicial ?? TODOS)
+  const meses = useMemo(() => [...new Set(pagos.map((p) => p.dia.slice(0, 7)))].sort().reverse(), [pagos])
   const [ocupado, iniciar] = useTransition()
 
   const cuenta = (e: string) => pagos.filter((p) => p.estado === e).length
@@ -76,9 +93,12 @@ export function PagosVista({ pagos, planes, red, pestanaInicial }: { pagos: Pago
         (!t || `${p.folio} ${p.cliente} ${p.referencia ?? ""}`.toLowerCase().includes(t)) &&
         (metodo === TODOS || p.metodo === metodo) &&
         (lugar === TODOS || p.lugar === lugar) &&
-        (perfil === TODOS || p.perfil === perfil),
+        (perfil === TODOS || p.perfil === perfil) &&
+        (mes === TODOS || p.dia.slice(0, 7) === mes),
     )
-  }, [pagos, pestana, q, metodo, lugar, perfil])
+  }, [pagos, pestana, q, metodo, lugar, perfil, mes])
+  // Igual que el indicador "Cobrado": las devoluciones no suman (salvo en su propia pestaña).
+  const totalFiltrado = filas.filter((p) => pestana === "devolucion" || p.estado !== "devolucion").reduce((s, p) => s + p.monto, 0)
 
   function accion(p: PagoFila, a: "conciliar" | "recibir") {
     iniciar(async () => {
@@ -181,7 +201,13 @@ export function PagosVista({ pagos, planes, red, pestanaInicial }: { pagos: Pago
             <Filtro etiqueta="Método" valor={metodo} onChange={setMetodo} opciones={Object.entries(METODO)} />
             <Filtro etiqueta="Dónde" valor={lugar} onChange={setLugar} opciones={Object.entries(LUGAR)} />
             <Filtro etiqueta="Perfil" valor={perfil} onChange={setPerfil} opciones={PERFILES.map((p) => [p, PERFIL_INFO[p].nombre])} />
+            <Filtro etiqueta="Mes" valor={mes} onChange={setMes} opciones={meses.map((m) => [m, nombreDeMes(m)])} />
           </div>
+          <p role="status" className="rounded-xl border bg-hueso-2 px-3.5 py-2.5 text-[13px]">
+            Viendo <b>{filas.length === 1 ? "1 pago" : `${filas.length} pagos`}</b> · suma <b className="num">{formatoMoneda(totalFiltrado)}</b>
+            {mes !== TODOS && <> · {nombreDeMes(mes)}</>}
+            {pestana !== "devolucion" && filas.some((p) => p.estado === "devolucion") && <span className="text-muted-foreground"> · las devoluciones no suman</span>}
+          </p>
           <div className="overflow-hidden rounded-2xl border bg-card">
             <Table>
               <TableHeader>

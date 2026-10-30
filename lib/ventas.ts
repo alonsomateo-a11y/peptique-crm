@@ -223,6 +223,15 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
     return { ok: false, error: "No se pudo registrar la venta. No se guardó nada." }
   }
 
+  // Dos ventas al mismo tiempo pueden tomar la misma pieza: si alguna bolsa quedó en negativo,
+  // esta venta se deshace y se pide intentar de nuevo (la otra venta sí se queda).
+  const tocados = [...new Set(partidas.map((x) => x.lote_id))]
+  const { data: despues } = await admin.from("existencias").select("lote_id, bolsa, piezas").in("lote_id", tocados)
+  if ((despues ?? []).some((e) => e.piezas < 0)) {
+    await deshacer()
+    return { ok: false, error: "Otra venta tomó la última pieza al mismo tiempo. Revisa existencias e intenta de nuevo." }
+  }
+
   // Avisos de recompra: el anterior se da por recomprado y se crea el de la siguiente etapa.
   const hoy = hoyMty()
   for (const id of ids) {
@@ -277,7 +286,10 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
 /** Aplica una dosis ya pagada de un plan por dosis. */
 export async function aplicarDosis(vendedor: Sesion, ventaId: string, numero: number) {
   if (vendedor.personaId === "demo") return { ok: false as const, error: "Entra con tu PIN." }
+  if (!Number.isInteger(numero) || numero < 1 || numero > 12) return { ok: false as const, error: "Dosis no válida." }
   const admin = crearClienteAdmin()
+  const { data: venta } = await admin.from("ventas").select("estado, forma_pago").eq("id", ventaId).maybeSingle()
+  if (!venta || venta.estado === "cancelada" || venta.forma_pago !== "por_dosis") return { ok: false as const, error: "Este plan no está activo." }
   const { data: pagos } = await admin.from("pagos").select("numero_dosis").eq("venta_id", ventaId).not("numero_dosis", "is", null)
   if (!(pagos ?? []).some((p) => p.numero_dosis === numero)) return { ok: false as const, error: "Esa dosis no está pagada." }
   const { error } = await admin.from("dosis_aplicadas").insert({ venta_id: ventaId, numero, aplicada_por: vendedor.personaId })

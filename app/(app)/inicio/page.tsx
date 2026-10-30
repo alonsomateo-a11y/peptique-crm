@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { alertasDelDia, hoyEnCaja, recompraDelMes } from "@/lib/inicio"
 import { formatoMoneda, formatoPorcentaje } from "@/lib/format"
 import { navPara } from "@/lib/nav"
-import { mesActual, resumenMes } from "@/lib/reportes"
+import { hoyActual, mesActual, resumenMes } from "@/lib/reportes"
 import { obtenerSesion } from "@/lib/sesion"
 import { cn } from "@/lib/utils"
 
@@ -34,11 +34,15 @@ export default async function Inicio() {
   const totalCanales = r.porCanal.reduce((s, c) => s + c.monto, 0)
   const maxCanal = Math.max(1, ...r.porCanal.map((c) => c.monto))
   const visibles = alertas.filter((a) => puedeVer(a.href)).slice(0, 3)
+  const hoyClave = hoyActual()
+  // Las ligas de detalle solo se ponen si el perfil puede abrir esa pantalla.
+  const liga = (href: string) => (puedeVer(href) ? href : undefined)
+  const ventasDe = (extra: Record<string, string>, desde: string) => liga(`/ventas?${new URLSearchParams({ estado: "validas", ...extra, desde })}`)
 
   return (
     <>
-      <div className="flex items-end gap-2.5">
-        <div className="flex-1">
+      <div className="flex flex-wrap items-end gap-2.5">
+        <div className="min-w-0 flex-1 basis-60">
           <div className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
             {fechaHoy} · {hoy.caja ? `caja abierta${hoy.caja.por ? ` por ${hoy.caja.por}` : ""}` : "caja cerrada"}
           </div>
@@ -90,10 +94,33 @@ export default async function Inicio() {
           positivo={(vsAnterior ?? 0) >= 0}
           contexto={r.plan.meta ? `Plan del mes ${formatoMoneda(r.plan.meta)}${avance !== null ? ` · ${formatoPorcentaje(avance)}` : ""}` : "Sin plan configurado"}
           tendencia={r.diario.length > 1 ? r.diario.slice(-14).map((d) => d.ventas) : undefined}
+          href={ventasDe({ mes }, `Ventas de ${nombreMes}`)}
+          ayuda="Suma del total con IVA de las ventas creadas este mes (hora de Monterrey), sin canceladas ni ventas de la red esperando pago. El cambio compara contra el mes anterior completo."
         />
-        <KpiCard etiqueta="Ventas de hoy" valor={formatoMoneda(hoy.ventasHoy)} contexto={hoy.numHoy === 1 ? "1 venta" : `${hoy.numHoy} ventas`} tendencia={r.diario.length > 1 ? r.diario.slice(-7).map((d) => d.delDia) : undefined} />
-        {esAdmin && <KpiCard etiqueta="Margen del mes" valor={r.margenBruto === null ? "—" : formatoPorcentaje(r.margenBruto)} contexto="Ingreso sin IVA contra costo de cada lote" />}
-        <KpiCard etiqueta="Recompra" valor={recompra.tasa === null ? "—" : formatoPorcentaje(recompra.tasa)} contexto={recompra.tasa === null ? "aún no vence ningún aviso este mes" : `${recompra.recompraron} recompras este mes`} />
+        <KpiCard
+          etiqueta="Ventas de hoy"
+          valor={formatoMoneda(hoy.ventasHoy)}
+          contexto={hoy.numHoy === 1 ? "1 venta" : `${hoy.numHoy} ventas`}
+          tendencia={r.diario.length > 1 ? r.diario.slice(-7).map((d) => d.delDia) : undefined}
+          href={ventasDe({ dia: hoyClave }, "Ventas de hoy")}
+          ayuda="Ventas creadas hoy, con el mismo criterio que las del mes. Los abonos de planes por dosis de ventas anteriores no cuentan aquí: están en Pagos."
+        />
+        {esAdmin && (
+          <KpiCard
+            etiqueta="Margen del mes"
+            valor={r.margenBruto === null ? "—" : formatoPorcentaje(r.margenBruto)}
+            contexto="Ingreso sin IVA contra costo de cada lote"
+            href={`/reportes?mes=${mes}#margen`}
+            ayuda="(Ventas del mes sin IVA − costo de cada pieza según su lote) ÷ ventas sin IVA. No descuenta comisiones ni gastos fijos; eso está en Reportes."
+          />
+        )}
+        <KpiCard
+          etiqueta="Recompra"
+          valor={recompra.tasa === null ? "—" : formatoPorcentaje(recompra.tasa)}
+          contexto={recompra.tasa === null ? "aún no vence ningún aviso este mes" : `${recompra.recompraron} recompras este mes`}
+          href={liga("/recompras?pestana=recompro")}
+          ayuda="De los clientes a los que se les terminó su producto este mes (avisos de recompra vencidos), qué porcentaje volvió a comprar. Sale de Recompras."
+        />
       </section>
 
       <div className="flex flex-col items-stretch gap-3 lg:flex-row">
@@ -115,6 +142,18 @@ export default async function Inicio() {
             </span>
           </div>
           {r.diario.length > 1 ? <GraficaVentasPlan datos={r.diario} /> : <p className="py-10 text-center text-[13px] text-muted-foreground">La gráfica aparece desde el segundo día del mes.</p>}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 pb-1 text-[12.5px] font-semibold">
+            {ventasDe({ mes }, `Ventas de ${nombreMes}`) && (
+              <Link href={ventasDe({ mes }, `Ventas de ${nombreMes}`)!} className="text-chart-1 hover:underline">
+                Ver las {r.ventas === 1 ? "1 venta" : `${r.ventas} ventas`} del mes →
+              </Link>
+            )}
+            {esAdmin && (
+              <Link href={`/reportes?mes=${mes}`} className="text-chart-1 hover:underline">
+                {r.plan.meta ? "Ver o cambiar el plan" : "Configurar el plan"} →
+              </Link>
+            )}
+          </div>
         </section>
         <section className="flex flex-col gap-3 rounded-2xl border bg-card p-[18px] lg:w-[300px]">
           <h2 className="text-lg font-semibold">Meta del mes</h2>
@@ -126,8 +165,8 @@ export default async function Inicio() {
             </div>
           </div>
           <dl className="flex flex-col gap-1.5 rounded-xl bg-hueso-2 p-3 text-[12.5px]">
-            <Fila etiqueta="Faltan" valor={formatoMoneda(faltan)} />
-            <Fila etiqueta={`Por día (${diasQuedan === 1 ? "1 día" : `${diasQuedan} días`})`} valor={diasQuedan ? formatoMoneda(faltan / diasQuedan) : "—"} />
+            <Fila etiqueta="Faltan" valor={r.plan.meta ? formatoMoneda(faltan) : "—"} />
+            <Fila etiqueta={`Por día (${diasQuedan === 1 ? "1 día" : `${diasQuedan} días`})`} valor={r.plan.meta && diasQuedan ? formatoMoneda(faltan / diasQuedan) : "—"} />
             <Fila etiqueta="Promedio diario" valor={formatoMoneda(promedio)} />
           </dl>
         </section>
@@ -139,16 +178,18 @@ export default async function Inicio() {
           <p className="text-[12.5px] text-muted-foreground">Ventas por canal · {nombreMes}</p>
         </div>
         {r.porCanal.map((c) => (
-          <div key={c.canal} className="flex flex-col gap-1.5">
+          <Link key={c.clave} href={ventasDe({ mes, canal: c.clave }, c.canal) ?? "#"} className="-mx-1.5 flex flex-col gap-1.5 rounded-lg px-1.5 py-1 hover:bg-hueso-2 focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none">
             <div className="flex items-center gap-2 text-[12.5px]">
-              <b className="flex-1">{c.canal}</b>
+              <b className="flex-1">
+                {c.canal} <span className="font-normal text-muted-foreground">{c.ventas === 1 ? "1 venta" : `${c.ventas} ventas`}</span>
+              </b>
               <b className="num">{formatoMoneda(c.monto)}</b>
               <span className="num w-9 text-right text-[11.5px] text-muted-foreground">{formatoPorcentaje(c.monto / totalCanales)}</span>
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-[#efe9e1]">
               <div className="h-full rounded-full bg-chart-1" style={{ width: `${(c.monto / maxCanal) * 100}%` }} />
             </div>
-          </div>
+          </Link>
         ))}
         {!r.porCanal.length && <p className="text-[13px] text-muted-foreground">Aún no hay ventas este mes.</p>}
       </section>

@@ -969,10 +969,11 @@ function PasoCobro({
               <button
                 type="button"
                 aria-label={`Una pieza más de ${p.nombre}`}
+                disabled={cantidad >= p.general + ((etapas[p.id] ?? 1) > 1 ? p.recurrentes : 0)}
                 onClick={() =>
                   setCarrito((c) => ({ ...c, [p.id]: cantidad + 1 }))
                 }
-                className="inline-flex size-9 items-center justify-center"
+                className="inline-flex size-9 items-center justify-center disabled:opacity-35"
               >
                 <Plus className="size-4" aria-hidden />
               </button>

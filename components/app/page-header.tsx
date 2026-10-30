@@ -18,7 +18,7 @@ export function PageHeader({
   return (
     <div className="flex flex-col gap-3">
       {ruta && (
-        <nav aria-label="Ruta" className="flex items-center gap-2 text-[12.5px] text-[#5c544c]">
+        <nav aria-label="Ruta" className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#5c544c]">
           {anterior?.[1] && (
             <Link
               href={anterior[1]}
@@ -43,8 +43,8 @@ export function PageHeader({
           ))}
         </nav>
       )}
-      <div className="flex items-end gap-2.5">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-end gap-2.5">
+        <div className="min-w-0 flex-1 basis-60">
           <h1 className="text-[30px] leading-tight font-medium">{titulo}</h1>
           {descripcion && <p className="mt-1 text-[12.5px] text-muted-foreground">{descripcion}</p>}
         </div>

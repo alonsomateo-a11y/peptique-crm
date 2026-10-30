@@ -2,6 +2,7 @@ import "server-only"
 
 import { hoyActual } from "@/lib/reportes"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
+import { liberarApartadosVencidos } from "@/lib/ventas"
 
 export type Alerta = { tipo: "crit" | "warn"; titulo: string; detalle: string; accion: string; href: string }
 
@@ -9,6 +10,7 @@ const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : vari
 
 /** Alertas del día para Inicio, de la más urgente a la menos. */
 export async function alertasDelDia(): Promise<Alerta[]> {
+  await liberarApartadosVencidos()
   const admin = crearClienteAdmin()
   const hoy = hoyActual()
   const en6h = new Date(Date.now() + 6 * 3_600_000).toISOString()
@@ -55,10 +57,11 @@ export async function alertasDelDia(): Promise<Alerta[]> {
 /** Caja abierta y ventas de hoy. */
 export async function hoyEnCaja() {
   const admin = crearClienteAdmin()
-  const desde = new Date(`${hoyActual()}T00:00:00-06:00`).toISOString()
+  const desde = new Date(`${hoyActual()}T00:00:00-06:00`)
+  const hasta = new Date(desde.getTime() + 86_400_000).toISOString()
   const [caja, ventas] = await Promise.all([
     admin.from("cortes_caja").select("abierta_en, personas:abierta_por(nombre)").is("cerrada_en", null).limit(1).maybeSingle(),
-    admin.from("ventas").select("total").gte("creado_en", desde).not("estado", "in", "(cancelada,esperando_pago)"),
+    admin.from("ventas").select("total").gte("creado_en", desde.toISOString()).lt("creado_en", hasta).not("estado", "in", "(cancelada,esperando_pago)"),
   ])
   return {
     caja: caja.data ? { por: (caja.data.personas as unknown as { nombre: string } | null)?.nombre ?? "" } : null,

@@ -1,13 +1,13 @@
 import type { NextRequest } from "next/server"
 
 import { PERFIL_INFO } from "@/lib/perfiles"
+import { celdaCsv as celda } from "@/lib/csv"
 import { exigirAdmin } from "@/lib/sesion"
 
 import { NOMBRE_AREA } from "../areas"
 
 import { buscarMovimientos, leerFiltros } from "../consulta"
 
-const celda = (v: string | null) => `"${(v ?? "").replace(/"/g, '""')}"`
 
 /** Actividad filtrada en CSV (abre en Excel con acentos). */
 export async function GET(request: NextRequest) {

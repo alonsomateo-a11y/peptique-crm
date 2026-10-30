@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { descargarCsv } from "@/lib/csv"
 import { formatoFecha, formatoMoneda } from "@/lib/format"
 import { formatoWhatsapp } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
@@ -23,17 +24,23 @@ export function ClientesVista({
   clientes,
   vendedores,
   ahora,
+  inicial = {},
 }: {
   clientes: ClienteFila[]
   vendedores: { id: string; nombre: string }[]
   /** Momento de la carga, para filtrar por última compra sin depender del reloj al dibujar. */
   ahora: number
+  inicial?: { ultima?: string; alta?: string; compras?: string }
 }) {
+  // Inicio del mes en hora de Monterrey, a partir del momento de la carga.
+  const inicioMes = useMemo(() => new Date(`${new Intl.DateTimeFormat("en-CA", { timeZone: "America/Monterrey" }).format(new Date(ahora)).slice(0, 7)}-01T00:00:00-06:00`).toISOString(), [ahora])
   const [buscar, setBuscar] = useState("")
   const [etiquetas, setEtiquetas] = useState<string[]>([])
   const [tipo, setTipo] = useState(TODOS)
   const [vendedor, setVendedor] = useState(TODOS)
-  const [ultima, setUltima] = useState<Ultima>("todas")
+  const [ultima, setUltima] = useState<Ultima>((["30", "60", "90", "nunca"] as const).find((u) => u === inicial.ultima) ?? "todas")
+  const [altaMes, setAltaMes] = useState(inicial.alta === "mes")
+  const [recurrentes, setRecurrentes] = useState(inicial.compras === "2")
   const [orden, setOrden] = useState<Orden>("compras")
   const [abierto, setAbierto] = useState(false)
 
@@ -47,6 +54,8 @@ export function ClientesVista({
       if (etiquetas.length && !etiquetas.every((e) => c.etiquetas.includes(e))) return false
       if (tipo !== TODOS && c.tipo !== tipo) return false
       if (vendedor !== TODOS && c.vendedor_id !== vendedor) return false
+      if (altaMes && c.creado_en < inicioMes) return false
+      if (recurrentes && c.compras < 2) return false
       if (ultima === "nunca") return !c.ultimaCompra
       if (ultima !== "todas") return !!c.ultimaCompra && ahora - Date.parse(c.ultimaCompra) <= Number(ultima) * 86_400_000
       return true
@@ -60,26 +69,17 @@ export function ClientesVista({
             ? (b.ultimaCompra ?? "").localeCompare(a.ultimaCompra ?? "")
             : b.compras - a.compras || b.total - a.total,
     )
-  }, [clientes, buscar, etiquetas, tipo, vendedor, ultima, orden, ahora])
+  }, [clientes, buscar, etiquetas, tipo, vendedor, ultima, orden, ahora, altaMes, recurrentes, inicioMes])
 
   function descargar(todos: boolean) {
     const lista = todos ? clientes : filas
-    const celda = (v: string | number | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`
-    const csv = [
-      ["Nombre", "WhatsApp", "Correo", "Tipo", "Etiquetas", "Origen", "Vendedor", "Waiver", "Compras", "Total comprado", "Última compra", "Alta"].join(","),
-      ...lista.map((c) =>
-        [c.nombre, c.whatsapp, c.correo, NOMBRE_TIPO[c.tipo], c.etiquetas.join("; "), c.origen, c.vendedor, c.waiver ? "Firmado" : "Pendiente", c.compras, c.total, c.ultimaCompra?.slice(0, 10), c.creado_en.slice(0, 10)]
-          .map(celda)
-          .join(","),
-      ),
-    ].join("\r\n")
-    const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }))
-    const a = Object.assign(document.createElement("a"), { href: url, download: todos ? "clientes-peptique.csv" : "clientes-peptique-filtrados.csv" })
-    a.click()
-    URL.revokeObjectURL(url)
+    descargarCsv(todos ? "clientes-peptique.csv" : "clientes-peptique-filtrados.csv", [
+      ["Nombre", "WhatsApp", "Correo", "Tipo", "Etiquetas", "Origen", "Vendedor", "Waiver", "Compras", "Total comprado", "Última compra", "Alta"],
+      ...lista.map((c) => [c.nombre, c.whatsapp, c.correo, NOMBRE_TIPO[c.tipo], c.etiquetas.join("; "), c.origen, c.vendedor, c.waiver ? "Firmado" : "Pendiente", c.compras, c.total, c.ultimaCompra?.slice(0, 10), c.creado_en.slice(0, 10)]),
+    ])
   }
 
-  const hayFiltros = etiquetas.length > 0 || tipo !== TODOS || vendedor !== TODOS || ultima !== "todas" || buscar.trim() !== ""
+  const hayFiltros = etiquetas.length > 0 || tipo !== TODOS || vendedor !== TODOS || ultima !== "todas" || buscar.trim() !== "" || altaMes || recurrentes
 
   return (
     <>
@@ -154,7 +154,21 @@ export function ClientesVista({
               <X className="size-3" aria-label="Quitar" />
             </button>
           ))}
-          <span className="text-muted-foreground">{filas.length === 1 ? "1 resultado" : `${filas.length} resultados`}</span>
+          {altaMes && (
+            <button type="button" onClick={() => setAltaMes(false)} className="inline-flex items-center gap-1.5 rounded-full border bg-card py-0.5 pr-2 pl-2.5 font-semibold hover:border-espresso">
+              Alta este mes
+              <X className="size-3" aria-label="Quitar" />
+            </button>
+          )}
+          {recurrentes && (
+            <button type="button" onClick={() => setRecurrentes(false)} className="inline-flex items-center gap-1.5 rounded-full border bg-card py-0.5 pr-2 pl-2.5 font-semibold hover:border-espresso">
+              Con 2 o más compras
+              <X className="size-3" aria-label="Quitar" />
+            </button>
+          )}
+          <span className="text-muted-foreground">
+            Viendo {filas.length === 1 ? "1 cliente" : `${filas.length} clientes`} · compraron en total <b className="num text-foreground">{formatoMoneda(filas.reduce((s, c) => s + c.total, 0))}</b>
+          </span>
         </div>
       )}
 

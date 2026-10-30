@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { Estado, type TipoEstado } from "@/components/app/estado"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { descargarCsv } from "@/lib/csv"
 import { formatoFecha } from "@/lib/format"
 import { formatoWhatsapp, ligaWhatsapp } from "@/lib/telefono"
 import { cn } from "@/lib/utils"
@@ -35,8 +36,8 @@ function estadoVisible(a: Aviso, diasAviso: number): [string, TipoEstado] {
   return [`En ${a.dias} días`, "neutro"]
 }
 
-export function RecomprasVista({ avisos, diasAviso }: { avisos: Aviso[]; diasAviso: number }) {
-  const [pestana, setPestana] = useState<EstadoAviso>("por_avisar")
+export function RecomprasVista({ avisos, diasAviso, pestanaInicial }: { avisos: Aviso[]; diasAviso: number; pestanaInicial?: string }) {
+  const [pestana, setPestana] = useState<EstadoAviso>(PESTANAS.find(([v]) => v === pestanaInicial)?.[0] ?? "por_avisar")
   const filas = useMemo(() => avisos.filter((a) => a.estado === pestana), [avisos, pestana])
   const [elegidoId, setElegidoId] = useState<string | null>(null)
   const elegido = filas.find((a) => a.id === elegidoId) ?? filas[0] ?? null
@@ -51,14 +52,10 @@ export function RecomprasVista({ avisos, diasAviso }: { avisos: Aviso[]; diasAvi
   }
 
   function descargar() {
-    const celda = (v: string | number | null) => `"${String(v ?? "").replace(/"/g, '""')}"`
-    const csv = [
-      ["Cliente", "WhatsApp", "Producto", "Se le acaba", "Siguiente etapa", "Le vendió", "Estado"].join(","),
-      ...filas.map((a) => [a.cliente, a.whatsapp, a.producto, a.seLeAcaba, a.siguienteEtapa, a.vendedor, estadoVisible(a, diasAviso)[0]].map(celda).join(",")),
-    ].join("\r\n")
-    const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }))
-    Object.assign(document.createElement("a"), { href: url, download: `recompras-${pestana}.csv` }).click()
-    URL.revokeObjectURL(url)
+    descargarCsv(`recompras-${pestana}.csv`, [
+      ["Cliente", "WhatsApp", "Producto", "Se le acaba", "Siguiente etapa", "Le vendió", "Estado"],
+      ...filas.map((a) => [a.cliente, a.whatsapp, a.producto, a.seLeAcaba, a.siguienteEtapa, a.vendedor, estadoVisible(a, diasAviso)[0]]),
+    ])
   }
 
   const mensaje = (a: Aviso) =>

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { crearClienteServidor } from "@/lib/supabase/server"
+import { liberarApartadosVencidos } from "@/lib/ventas"
 
 import { margenDe } from "../productos/datos-cliente"
 import type { Bolsas, LoteFila, ProductoInventario } from "./tipos"
@@ -22,6 +23,7 @@ export async function apartadoSugerido(supabase: Awaited<ReturnType<typeof crear
 }
 
 export async function cargarInventario() {
+  await liberarApartadosVencidos()
   const supabase = await crearClienteServidor()
   const [productos, lotes, movimientos, sugerido, ultimoTc] = await Promise.all([
     supabase.from("productos").select("id, nombre, presentacion, familia, visible, precio_publico").order("nombre").order("presentacion"),
