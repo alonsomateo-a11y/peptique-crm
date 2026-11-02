@@ -137,3 +137,20 @@ export async function guardarComisiones(_prev: Resultado, form: FormData): Promi
   revalidatePath("/red")
   return { ok: true }
 }
+
+/** Si se pide el waiver en la primera compra y su texto (lo define el abogado de Peptique). */
+export async function guardarWaiver(_prev: Resultado, form: FormData): Promise<Resultado> {
+  const sesion = await soloAdmin()
+  if (!sesion) return { error: "Solo el administrador puede cambiar el waiver." }
+  const pedir = form.get("pedir") === "on"
+  const t = texto(form, "texto")
+  if (pedir && t.length < 40) return { error: "Escribe el texto completo del waiver." }
+  if (t.length > 6000) return { error: "El texto es demasiado largo." }
+  const supabase = await crearClienteServidor()
+  const { error } = await supabase.from("configuracion").upsert({ clave: "waiver", valor: { pedir, texto: t } })
+  if (error) return { error: "No se pudo guardar el waiver." }
+  await registrar(supabase, sesion, { area: "configuracion", accion: pedir ? "actualizó el texto del waiver (se pide en la primera compra)" : "dejó de pedir el waiver" })
+  revalidatePath(RUTA)
+  revalidatePath("/mostrador")
+  return { ok: true }
+}

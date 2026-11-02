@@ -1,12 +1,13 @@
 import "server-only"
 
+import { leerWaiver } from "@/lib/waiver"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { liberarApartadosVencidos, precioPara } from "@/lib/ventas"
 
 import type { Caja, ClienteMostrador, ProductoMostrador } from "./tipos"
 
 /** Datos del mostrador. Se leen con la llave secreta y solo salen campos sin costos. */
-export async function cargarMostrador(): Promise<{ caja: Caja; productos: ProductoMostrador[]; recientes: ClienteMostrador[]; waiver: string }> {
+export async function cargarMostrador(): Promise<{ caja: Caja; productos: ProductoMostrador[]; recientes: ClienteMostrador[]; waiver: string | null }> {
   await liberarApartadosVencidos()
   const admin = crearClienteAdmin()
   const [caja, productos, lotes, existencias, ventas, config] = await Promise.all([
@@ -15,7 +16,7 @@ export async function cargarMostrador(): Promise<{ caja: Caja; productos: Produc
     admin.from("lotes").select("id, producto_id"),
     admin.from("existencias").select("lote_id, bolsa, piezas"),
     admin.from("ventas").select("cliente_id, forma_pago, estado, creado_en").order("creado_en", { ascending: false }).limit(200),
-    admin.from("configuracion").select("valor").eq("clave", "waiver").maybeSingle(),
+    leerWaiver(admin),
   ])
 
   const productoDeLote = new Map((lotes.data ?? []).map((l) => [l.id, l.producto_id]))
@@ -49,8 +50,7 @@ export async function cargarMostrador(): Promise<{ caja: Caja; productos: Produc
       .map((id) => (clientes ?? []).find((x) => x.id === id))
       .filter((x) => !!x)
       .map((x) => ({ id: x.id, nombre: x.nombre, whatsapp: x.whatsapp, tipo: x.tipo, waiver: !!x.waiver_firmado_en, planDosis: planes.has(x.id) })),
-    waiver:
-      (config.data?.valor as { texto?: string } | undefined)?.texto ??
-      "Declaro que soy mayor de edad, que los productos que adquiero son para uso exclusivo de investigación y no para consumo humano, y que recibí el certificado de análisis (COA) del lote.",
+    // null = Peptique decidió no pedir waiver; el flujo se salta ese paso.
+    waiver: config.pedir ? config.texto : null,
   }
 }

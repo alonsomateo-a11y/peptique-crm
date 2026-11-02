@@ -63,7 +63,8 @@ export function FlujoVenta({
   caja: Caja;
   productos: ProductoMostrador[];
   recientes: ClienteMostrador[];
-  waiver: string;
+  /** null: Peptique no pide waiver. */
+  waiver: string | null;
   clienteInicial: string | null;
   /** Admin comercial: siempre vende en persona, sin caja. */
   soloEnPersona?: boolean;
@@ -100,7 +101,7 @@ export function FlujoVenta({
   function elegirCliente(c: ClienteMostrador) {
     setCliente(c);
     setCarrito({});
-    if (!c.waiver) return setPaso("waiver");
+    if (waiver && !c.waiver) return setPaso("waiver");
     iniciar(async () => {
       setEtapas(await etapasCliente(c.id));
       setPaso("productos");
@@ -185,6 +186,7 @@ export function FlujoVenta({
       )}
       {paso === "cliente" && (
         <PasoCliente
+          pideWaiver={!!waiver}
           recientes={recientes}
           canal={canal}
           onElegir={elegirCliente}
@@ -192,7 +194,7 @@ export function FlujoVenta({
           cargando={ocupado}
         />
       )}
-      {paso === "waiver" && cliente && (
+      {paso === "waiver" && cliente && waiver && (
         <PasoWaiver
           cliente={cliente}
           texto={waiver}
@@ -352,12 +354,14 @@ function Donde({
 /* ───────────── Paso 1: cliente ───────────── */
 
 function PasoCliente({
+  pideWaiver,
   recientes,
   canal,
   onElegir,
   onAtras,
   cargando,
 }: {
+  pideWaiver: boolean;
   recientes: ClienteMostrador[];
   canal: Canal;
   onElegir: (c: ClienteMostrador) => void;
@@ -452,7 +456,7 @@ function PasoCliente({
                       Plan por dosis
                     </span>
                   )}
-                  {!c.waiver && (
+                  {pideWaiver && !c.waiver && (
                     <span className="rounded-full bg-warn-bg px-2 py-0.5 text-[11px] font-semibold text-warn">
                       Sin waiver
                     </span>
@@ -1362,7 +1366,7 @@ function TarjetaCliente({
             : cliente.tipo === "distribuidor"
               ? "Distribuidor"
               : "Paciente"}{" "}
-          · waiver firmado
+          {cliente.waiver && " · waiver firmado"}
         </span>
       </div>
       <button

@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 
 import { NOMBRE_CANAL, NOMBRE_ESTADO, TIPO_ESTADO, type CanalVenta, type EstadoVenta } from "../tipos"
 import { AccionesVenta } from "./acciones"
+import { EtiquetasVenta } from "./etiquetas"
 
 export const metadata: Metadata = { title: "Venta" }
 
@@ -39,7 +40,7 @@ export default async function DetalleVenta({ params }: PageProps<"/ventas/[folio
   const { data } = await supabase
     .from("ventas")
     .select(
-      "id, folio, canal, estado, forma_pago, total, nota, motivo_cancelacion, creado_en, clientes(id, nombre, whatsapp, tipo), personas:vendedor_id(nombre), venta_partidas(id, cantidad, precio_unitario, etapa_protocolo, productos(nombre, presentacion, pagos_por_dosis), lotes(codigo)), pagos(id, monto, metodo, lugar, estado, referencia, numero_dosis, creado_en, personas:cobro_persona_id(nombre)), dosis_aplicadas(numero)",
+      "id, folio, canal, estado, forma_pago, total, nota, etiquetas, motivo_cancelacion, creado_en, clientes(id, nombre, whatsapp, tipo), personas:vendedor_id(nombre), venta_partidas(id, cantidad, precio_unitario, etapa_protocolo, productos(nombre, presentacion, pagos_por_dosis), lotes(codigo)), pagos(id, monto, metodo, lugar, estado, referencia, numero_dosis, creado_en, personas:cobro_persona_id(nombre)), dosis_aplicadas(numero)",
     )
     .eq("folio", folio)
     .maybeSingle()
@@ -53,6 +54,7 @@ export default async function DetalleVenta({ params }: PageProps<"/ventas/[folio
     forma_pago: string
     total: number
     nota: string | null
+    etiquetas: string[] | null
     motivo_cancelacion: string | null
     creado_en: string
     clientes: { id: string; nombre: string; whatsapp: string; tipo: string } | null
@@ -96,6 +98,7 @@ export default async function DetalleVenta({ params }: PageProps<"/ventas/[folio
         )}
         {v.nota && <span className="text-[12.5px] text-muted-foreground">· {v.nota}</span>}
       </div>
+      <EtiquetasVenta ventaId={v.id} folio={v.folio} iniciales={v.etiquetas ?? []} editable={sesion.perfil === "administrador"} />
       {v.estado === "cancelada" && v.motivo_cancelacion && <p className="rounded-xl bg-crit-bg px-3.5 py-2.5 text-[13px] text-crit">Cancelada: {v.motivo_cancelacion}</p>}
 
       {porDosis && (

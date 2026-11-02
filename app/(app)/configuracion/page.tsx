@@ -8,9 +8,13 @@ import { exigirAdmin } from "@/lib/sesion"
 import { crearClienteServidor } from "@/lib/supabase/server"
 import { cn } from "@/lib/utils"
 
+import { leerWaiver, TEXTO_WAIVER_BASE } from "@/lib/waiver"
+
 import { ComisionesForm } from "./comisiones-form"
 import { EquipoVista } from "./equipo-vista"
+import { ImportarVista } from "./importar-vista"
 import type { PersonaFila } from "./tipos"
+import { WaiverForm } from "./waiver-form"
 
 export const metadata: Metadata = { title: "Configuración" }
 
@@ -18,6 +22,8 @@ const SECCIONES = [
   { id: "equipo", titulo: "Equipo y permisos" },
   { id: "comisiones", titulo: "Comisiones" },
   { id: "reglas", titulo: "Reglas comerciales" },
+  { id: "waiver", titulo: "Waiver" },
+  { id: "importar", titulo: "Importar datos" },
 ] as const
 
 export default async function Configuracion({ searchParams }: PageProps<"/configuracion">) {
@@ -30,14 +36,14 @@ export default async function Configuracion({ searchParams }: PageProps<"/config
     <>
       <PageHeader ruta={[["Inicio", "/inicio"], ["Configuración"]]} titulo="Configuración" />
       <div className="flex flex-col gap-5 md:flex-row md:items-start">
-        <nav aria-label="Secciones de configuración" className="flex shrink-0 gap-1 md:w-52 md:flex-col">
+        <nav aria-label="Secciones de configuración" className="flex shrink-0 gap-1 overflow-x-auto md:w-52 md:flex-col">
           {SECCIONES.map((x) => (
             <Link
               key={x.id}
               href={`/configuracion?seccion=${x.id}`}
               aria-current={x.id === seccion ? "page" : undefined}
               className={cn(
-                "rounded-[10px] px-3 py-2 text-[13.5px] font-semibold text-[#5c544c] hover:bg-hueso",
+                "shrink-0 rounded-[10px] px-3 py-2 text-[13.5px] font-semibold text-[#5c544c] hover:bg-hueso",
                 x.id === seccion && "bg-card text-foreground shadow-sm ring-1 ring-border",
               )}
             >
@@ -49,6 +55,8 @@ export default async function Configuracion({ searchParams }: PageProps<"/config
           {seccion === "equipo" && <Equipo supabase={supabase} yo={sesion.personaId} />}
           {seccion === "comisiones" && <Comisiones supabase={supabase} />}
           {seccion === "reglas" && <Reglas supabase={supabase} />}
+          {seccion === "waiver" && <Waiver supabase={supabase} />}
+          {seccion === "importar" && <ImportarVista />}
           <p className="flex items-start gap-2 rounded-xl border bg-hueso-2 px-3.5 py-3 text-[12.5px]">
             <ShieldAlert className="mt-px size-4 shrink-0" aria-hidden />
             Distribuidores y comisionistas no ven costos, márgenes, proveedores, COA original ni protocolos. Las altas que pide un distribuidor las aprueba el administrador.
@@ -147,6 +155,21 @@ async function Reglas({ supabase }: { supabase: Supa }) {
         ))}
       </dl>
       <p className="text-[11.5px] text-muted-foreground">No son interruptores: las dejamos listas con Peptique y se ajustan con nosotros.</p>
+    </section>
+  )
+}
+
+async function Waiver({ supabase }: { supabase: Supa }) {
+  const w = await leerWaiver(supabase)
+  return (
+    <section aria-labelledby="titulo-waiver" className="flex flex-col gap-3 rounded-2xl border bg-card p-5">
+      <div className="flex items-center gap-2">
+        <h2 id="titulo-waiver" className="flex-1 text-xl font-medium">
+          Waiver del cliente
+        </h2>
+        <Estado tipo={w.pedir ? "ok" : "neutro"}>{w.pedir ? "Se pide" : "No se pide"}</Estado>
+      </div>
+      <WaiverForm pedir={w.pedir} texto={w.texto} esBase={w.texto === TEXTO_WAIVER_BASE} />
     </section>
   )
 }

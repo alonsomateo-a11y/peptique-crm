@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 
+import { registrar } from "@/lib/bitacora"
 import { obtenerSesion } from "@/lib/sesion"
+import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { aplicarDosis, cancelarVenta, cobrarDosis, marcarEntregada, registrarPago, registrarVenta, type Metodo } from "@/lib/ventas"
 
 import type { Resultado } from "./tipos"
@@ -64,4 +66,16 @@ export async function dosisVenta(ventaId: string, folio: string, accion: "aplica
   const r = accion === "aplicar" ? await aplicarDosis(s, ventaId, n) : await cobrarDosis(s, ventaId, metodo, "mostrador_caja")
   refrescar(folio)
   return r.ok ? { ok: true } : { error: r.error }
+}
+
+export async function cambiarEtiquetasVenta(ventaId: string, folio: string, etiquetas: string[]): Promise<Resultado> {
+  const s = await soloAdmin()
+  if (!s || !uuid.test(ventaId)) return SOLO_ADMIN
+  const limpias = [...new Set(etiquetas.map((e) => e.trim().slice(0, 30)).filter(Boolean))].slice(0, 10)
+  const supabase = crearClienteAdmin()
+  const { error } = await supabase.from("ventas").update({ etiquetas: limpias }).eq("id", ventaId)
+  if (error) return { error: "No se pudieron guardar las etiquetas." }
+  await registrar(supabase, s, { area: "ventas", accion: `Etiquetas de ${folio}: ${limpias.join(", ") || "sin etiquetas"}`, entidad: "venta", entidad_id: ventaId })
+  refrescar(folio)
+  return { ok: true }
 }

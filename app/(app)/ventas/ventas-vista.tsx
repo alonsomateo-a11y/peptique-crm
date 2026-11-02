@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { ArrowRight, Plus, Search, ShoppingBag } from "lucide-react"
+import { ArrowRight, Download, Plus, Search, ShoppingBag } from "lucide-react"
 
 import { Estado } from "@/components/app/estado"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { descargarCsv } from "@/lib/csv"
 import { formatoFecha, formatoMoneda } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -43,6 +44,7 @@ export function VentasVista({
   const [mes, setMes] = useState(inicial.mes ?? TODOS)
   const [producto, setProducto] = useState(inicial.producto ?? TODOS)
   const [dia, setDia] = useState(inicial.dia ?? "")
+  const [etiqueta, setEtiqueta] = useState(TODOS)
   const [desde, setDesde] = useState(inicial.desde ?? "")
   const [abierto, setAbierto] = useState(false)
   const [vuelta, setVuelta] = useState(0)
@@ -54,6 +56,8 @@ export function VentasVista({
     [ventas],
   )
 
+  const etiquetasUsadas = useMemo(() => [...new Set(ventas.flatMap((v) => v.etiquetas))].sort((a, b) => a.localeCompare(b, "es")), [ventas])
+
   const filas = useMemo(() => {
     const t = q.trim().toLowerCase()
     return ventas.filter(
@@ -64,14 +68,15 @@ export function VentasVista({
         (vendedor === TODOS || v.vendedorId === vendedor) &&
         (mes === TODOS || v.dia.slice(0, 7) === mes) &&
         (!dia || v.dia === dia) &&
-        (producto === TODOS || v.partidas.some((p) => p.productoId === producto)),
+        (producto === TODOS || v.partidas.some((p) => p.productoId === producto)) &&
+        (etiqueta === TODOS || v.etiquetas.includes(etiqueta)),
     )
-  }, [ventas, q, canal, estado, vendedor, mes, dia, producto])
+  }, [ventas, q, canal, estado, vendedor, mes, dia, producto, etiqueta])
 
   const total = filas.reduce((s, v) => s + v.total, 0)
   const saldo = filas.reduce((s, v) => s + v.saldo, 0)
   const delProducto = producto === TODOS ? null : filas.flatMap((v) => v.partidas).filter((p) => p.productoId === producto)
-  const hayFiltros = q.trim() || canal !== TODOS || estado !== TODOS || vendedor !== TODOS || mes !== TODOS || dia || producto !== TODOS
+  const hayFiltros = q.trim() || canal !== TODOS || estado !== TODOS || vendedor !== TODOS || mes !== TODOS || dia || producto !== TODOS || etiqueta !== TODOS
   function limpiar() {
     setQ("")
     setCanal(TODOS)
@@ -80,7 +85,31 @@ export function VentasVista({
     setMes(TODOS)
     setDia("")
     setProducto(TODOS)
+    setEtiqueta(TODOS)
     setDesde("")
+  }
+
+  /** Lo que se ve, una fila por producto vendido, para abrirlo en Excel. */
+  function descargar() {
+    descargarCsv(`ventas-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ["Folio", "Fecha", "Cliente", "Canal", "Vendió", "Estado", "Producto", "Piezas", "Importe con IVA", "Total de la venta", "Saldo", "Etiquetas"],
+      ...filas.flatMap((v) =>
+        (v.partidas.length ? v.partidas : [{ nombre: "", cantidad: 0, importe: 0 }]).map((p, i) => [
+          v.folio,
+          v.dia,
+          v.cliente,
+          NOMBRE_CANAL[v.canal],
+          v.vendedor,
+          NOMBRE_ESTADO[v.estado],
+          p.nombre,
+          p.cantidad,
+          p.importe,
+          i === 0 ? v.total : "",
+          i === 0 ? v.saldo : "",
+          v.etiquetas.join("; "),
+        ]),
+      ),
+    ])
   }
 
   function nuevoPedido() {
@@ -109,6 +138,7 @@ export function VentasVista({
         <Filtro etiqueta="Vendedor" valor={vendedor} onChange={setVendedor} opciones={vendedores} />
         <Filtro etiqueta="Mes" valor={mes} onChange={setMes} opciones={meses.map((m) => [m, nombreMes(m)])} />
         <Filtro etiqueta="Producto" valor={producto} onChange={setProducto} opciones={productosVendidos} />
+        {etiquetasUsadas.length > 0 && <Filtro etiqueta="Etiqueta" valor={etiqueta} onChange={setEtiqueta} opciones={etiquetasUsadas.map((e) => [e, e])} />}
         <div className="flex-1" />
         {puedeCrear && (
           <Button size="lg" onClick={nuevoPedido}>
@@ -142,8 +172,12 @@ export function VentasVista({
           )}
           {dia && <span className="rounded-full bg-card px-2 py-0.5 text-[12px] font-semibold">Día {formatoFecha(new Date(`${dia}T12:00:00-06:00`))}</span>}
           {estado === "validas" && <span className="text-[12px] text-muted-foreground">Sin canceladas ni ventas de la red esperando pago</span>}
+          <button type="button" onClick={descargar} disabled={filas.length === 0} className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-semibold text-chart-1 hover:underline disabled:opacity-40">
+            <Download className="size-3.5" aria-hidden />
+            Descargar
+          </button>
           {hayFiltros && (
-            <button type="button" onClick={limpiar} className="ml-auto text-[12.5px] font-semibold text-chart-1 hover:underline">
+            <button type="button" onClick={limpiar} className=" text-[12.5px] font-semibold text-chart-1 hover:underline">
               Quitar filtros
             </button>
           )}
@@ -183,7 +217,10 @@ export function VentasVista({
                 <TableRow key={v.id} className={cn(v.estado === "cancelada" && "text-muted-foreground")}>
                   <TableCell className="font-mono text-[12px]">{v.folio}</TableCell>
                   <TableCell className="text-[13px] whitespace-nowrap">{formatoFecha(new Date(v.creado_en))}</TableCell>
-                  <TableCell className="font-semibold">{v.cliente}</TableCell>
+                  <TableCell className="font-semibold">
+                    {v.cliente}
+                    {v.etiquetas.length > 0 && <span className="block text-[11px] font-semibold text-muted-foreground">{v.etiquetas.join(" · ")}</span>}
+                  </TableCell>
                   <TableCell className="max-w-56 truncate text-[12.5px]" title={v.productos}>
                     {v.productos}
                   </TableCell>

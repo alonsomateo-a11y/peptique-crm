@@ -1,5 +1,6 @@
 import "server-only"
 
+import { leerWaiver } from "@/lib/waiver"
 import type { Sesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 
@@ -99,7 +100,7 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   const { data: cliente } = await admin.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").eq("id", d.clienteId).maybeSingle()
   if (!cliente) return { ok: false, error: "Cliente no encontrado." }
   // El waiver es del paciente; los pedidos de médicos y distribuidores no lo piden.
-  if (!cliente.waiver_firmado_en && !(d.canal === "pedido" && cliente.tipo !== "paciente"))
+  if (!cliente.waiver_firmado_en && !(d.canal === "pedido" && cliente.tipo !== "paciente") && (await leerWaiver(admin)).pedir)
     return { ok: false, error: "El cliente debe firmar el waiver antes de comprar." }
   if ((d.canal === "pedido" || d.canal === "red") && d.forma === "por_dosis") return { ok: false, error: "Esta venta se cobra completa." }
   if (d.canal === "red" && d.metodo === "efectivo") return { ok: false, error: "La red cobra por transferencia o terminal, sin efectivo." }
