@@ -33,10 +33,12 @@ export type VentaFila = {
   /** Por producto (sumado entre lotes): para filtrar y para justificar montos por producto. */
   partidas: { productoId: string; nombre: string; cantidad: number; importe: number }[]
   etiquetas: string[]
+  /** De qué lote salió cada pieza: para justificar lo vendido de un lote en Inventario. */
+  porLote: { loteId: string; cantidad: number; importe: number }[]
 }
 
 /** Filtros que llegan en la liga (desde Inicio, Reportes, etc.). */
-export type FiltrosVentas = { q?: string; canal?: string; estado?: string; vendedor?: string; mes?: string; dia?: string; producto?: string; desde?: string }
+export type FiltrosVentas = { q?: string; canal?: string; estado?: string; vendedor?: string; mes?: string; dia?: string; producto?: string; lote?: string; desde?: string }
 
 /** Las ventas que cuentan en Inicio y Reportes: sin canceladas ni esperando el pago de la red. */
 export const cuentaParaReportes = (e: EstadoVenta) => e !== "cancelada" && e !== "esperando_pago"

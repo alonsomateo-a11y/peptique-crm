@@ -15,7 +15,7 @@ export async function cargarVentas(): Promise<VentaFila[]> {
   const supabase = crearClienteAdmin()
   const { data, error } = await supabase
     .from("ventas")
-    .select("id, folio, creado_en, canal, estado, forma_pago, total, etiquetas, cliente_id, vendedor_id, clientes(nombre), personas:vendedor_id(nombre), venta_partidas(producto_id, cantidad, precio_unitario, productos(nombre, presentacion)), pagos(monto, estado)")
+    .select("id, folio, creado_en, canal, estado, forma_pago, total, etiquetas, cliente_id, vendedor_id, clientes(nombre), personas:vendedor_id(nombre), venta_partidas(producto_id, lote_id, cantidad, precio_unitario, productos(nombre, presentacion)), pagos(monto, estado)")
     .order("creado_en", { ascending: false })
     .limit(LIMITE_VENTAS)
   if (error) throw error
@@ -32,7 +32,7 @@ export async function cargarVentas(): Promise<VentaFila[]> {
     vendedor_id: string
     clientes: { nombre: string } | null
     personas: { nombre: string } | null
-    venta_partidas: { producto_id: string; cantidad: number; precio_unitario: number; productos: { nombre: string; presentacion: string } | null }[]
+    venta_partidas: { producto_id: string; lote_id: string | null; cantidad: number; precio_unitario: number; productos: { nombre: string; presentacion: string } | null }[]
     pagos: { monto: number; estado: string }[]
   }
   return (data as unknown as Fila[]).map((v) => {
@@ -63,6 +63,7 @@ export async function cargarVentas(): Promise<VentaFila[]> {
       productos: [...porProducto.values()].map((x) => `${x.cantidad > 1 ? `${x.cantidad} × ` : ""}${x.nombre}`).join(", "),
       partidas: [...porProducto].map(([productoId, x]) => ({ productoId, ...x })),
       etiquetas: v.etiquetas ?? [],
+      porLote: v.venta_partidas.filter((p) => p.lote_id).map((p) => ({ loteId: p.lote_id!, cantidad: p.cantidad, importe: p.cantidad * Number(p.precio_unitario) })),
     }
   })
 }

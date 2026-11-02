@@ -46,6 +46,7 @@ export function VentasVista({
   const [dia, setDia] = useState(inicial.dia ?? "")
   const [etiqueta, setEtiqueta] = useState(TODOS)
   const [desde, setDesde] = useState(inicial.desde ?? "")
+  const [lote, setLote] = useState(inicial.lote ?? "")
   const [abierto, setAbierto] = useState(false)
   const [vuelta, setVuelta] = useState(0)
 
@@ -69,14 +70,16 @@ export function VentasVista({
         (mes === TODOS || v.dia.slice(0, 7) === mes) &&
         (!dia || v.dia === dia) &&
         (producto === TODOS || v.partidas.some((p) => p.productoId === producto)) &&
-        (etiqueta === TODOS || v.etiquetas.includes(etiqueta)),
+        (etiqueta === TODOS || v.etiquetas.includes(etiqueta)) &&
+        (!lote || v.porLote.some((p) => p.loteId === lote)),
     )
-  }, [ventas, q, canal, estado, vendedor, mes, dia, producto, etiqueta])
+  }, [ventas, q, canal, estado, vendedor, mes, dia, producto, etiqueta, lote])
 
   const total = filas.reduce((s, v) => s + v.total, 0)
   const saldo = filas.reduce((s, v) => s + v.saldo, 0)
+  const delLote = lote ? filas.flatMap((v) => v.porLote).filter((p) => p.loteId === lote) : null
   const delProducto = producto === TODOS ? null : filas.flatMap((v) => v.partidas).filter((p) => p.productoId === producto)
-  const hayFiltros = q.trim() || canal !== TODOS || estado !== TODOS || vendedor !== TODOS || mes !== TODOS || dia || producto !== TODOS || etiqueta !== TODOS
+  const hayFiltros = q.trim() || canal !== TODOS || estado !== TODOS || vendedor !== TODOS || mes !== TODOS || dia || producto !== TODOS || etiqueta !== TODOS || lote
   function limpiar() {
     setQ("")
     setCanal(TODOS)
@@ -86,6 +89,7 @@ export function VentasVista({
     setDia("")
     setProducto(TODOS)
     setEtiqueta(TODOS)
+    setLote("")
     setDesde("")
   }
 
@@ -168,6 +172,11 @@ export function VentasVista({
             <span>
               · de este producto: <b className="num">{delProducto.reduce((s, p) => s + p.cantidad, 0)} pzas</b> por <b className="num">{formatoMoneda(delProducto.reduce((s, p) => s + p.importe, 0))}</b> con IVA (
               {formatoMoneda(delProducto.reduce((s, p) => s + p.importe, 0) / 1.16)} sin IVA)
+            </span>
+          )}
+          {delLote && (
+            <span>
+              · de este lote: <b className="num">{delLote.reduce((s, p) => s + p.cantidad, 0)} pzas</b> por <b className="num">{formatoMoneda(delLote.reduce((s, p) => s + p.importe, 0))}</b>
             </span>
           )}
           {dia && <span className="rounded-full bg-card px-2 py-0.5 text-[12px] font-semibold">Día {formatoFecha(new Date(`${dia}T12:00:00-06:00`))}</span>}

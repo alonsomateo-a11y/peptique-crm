@@ -36,7 +36,7 @@ export default async function Configuracion({ searchParams }: PageProps<"/config
     <>
       <PageHeader ruta={[["Inicio", "/inicio"], ["Configuración"]]} titulo="Configuración" />
       <div className="flex flex-col gap-5 md:flex-row md:items-start">
-        <nav aria-label="Secciones de configuración" className="flex shrink-0 gap-1 overflow-x-auto md:w-52 md:flex-col">
+        <nav aria-label="Secciones de configuración" className="flex shrink-0 flex-wrap gap-1 md:w-52 md:flex-col md:flex-nowrap">
           {SECCIONES.map((x) => (
             <Link
               key={x.id}

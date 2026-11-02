@@ -69,7 +69,7 @@ export function KpiCard({
       </div>
       {contexto && <span className="text-[11.5px] text-muted-foreground">{contexto}</span>}
       {href && (
-        <span className="mt-auto inline-flex items-center gap-1 pt-0.5 text-[11.5px] font-semibold text-chart-1" aria-hidden>
+        <span className="mt-auto inline-flex items-center gap-1 pt-0.5 text-[11.5px] font-semibold text-ok" aria-hidden>
           Ver detalle <ArrowRight className="size-3" />
         </span>
       )}

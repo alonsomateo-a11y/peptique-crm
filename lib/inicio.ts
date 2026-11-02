@@ -31,6 +31,7 @@ export async function alertasDelDia(): Promise<Alerta[]> {
     const p = productoDeLote.get(e.lote_id)
     if (p) stock.set(p, (stock.get(p) ?? 0) + e.piezas)
   }
+  // Mismo criterio que el filtro "Para vender: 3 o menos" de Inventario.
   const bajos = (productos.data ?? []).filter((p) => (stock.get(p.id) ?? 0) <= 3)
   const agotados = bajos.filter((p) => !stock.get(p.id))
 
@@ -41,10 +42,17 @@ export async function alertasDelDia(): Promise<Alerta[]> {
   if (bajos.length)
     a.push({
       tipo: agotados.length ? "crit" : "warn",
-      titulo: agotados.length ? plural(agotados.length, "1 producto visible agotado", "# productos visibles agotados") : plural(bajos.length, "1 producto con stock bajo", "# productos con stock bajo"),
-      detalle: bajos.slice(0, 4).map((p) => `${p.nombre} ${p.presentacion}`).join(", ") + (bajos.length > 4 ? "…" : ""),
+      // El título cuenta lo mismo que muestra Inventario al abrir la liga.
+      titulo: plural(bajos.length, "1 producto con 3 piezas o menos", "# productos con 3 piezas o menos"),
+      detalle:
+        (agotados.length ? `${plural(agotados.length, "1 agotado", "# agotados")}: ` : "") +
+        (agotados.length ? agotados : bajos)
+          .slice(0, 3)
+          .map((p) => `${p.nombre} ${p.presentacion}`)
+          .join(", ") +
+        ((agotados.length || bajos.length) > 3 ? "…" : ""),
       accion: "Ver inventario",
-      href: "/inventario",
+      href: "/inventario?vista=producto&piezas=bajo",
     })
   if (devoluciones.data?.length) a.push({ tipo: "warn", titulo: plural(devoluciones.data.length, "1 devolución pendiente", "# devoluciones pendientes"), detalle: "Pagos de ventas canceladas", accion: "Ver en Pagos", href: "/pagos" })
   if (porEntregar.data?.length) {

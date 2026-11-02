@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Ventas" }
 
 const leer = (sp: Record<string, string | string[] | undefined>): FiltrosVentas => {
   const v = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string).slice(0, 80) : undefined)
-  return { q: v("q"), canal: v("canal"), estado: v("estado"), vendedor: v("vendedor"), mes: v("mes"), dia: v("dia"), producto: v("producto"), desde: v("desde") }
+  return { q: v("q"), canal: v("canal"), estado: v("estado"), vendedor: v("vendedor"), mes: v("mes"), dia: v("dia"), producto: v("producto"), lote: v("lote"), desde: v("desde") }
 }
 
 export default async function Ventas({ searchParams }: PageProps<"/ventas">) {
