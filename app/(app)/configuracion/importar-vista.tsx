@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { Estado } from "@/components/app/estado"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { descargarCsv } from "@/lib/csv"
 import { PLANTILLAS, type EstadoFila, type Plantilla, type Revision, type TipoImportacion } from "@/lib/importar/plantillas"
 import { cn } from "@/lib/utils"
@@ -18,6 +19,20 @@ const cuantos = (n: number, [uno, varios]: [string, string]) => `${n.toLocaleStr
 
 function plantillaCsv(p: Plantilla) {
   descargarCsv(`plantilla-${p.tipo}.csv`, [p.columnas.map((c) => c.titulo), p.columnas.map((c) => c.ejemplo)])
+}
+
+/** Convierte "Nombre 81 1234 5678" (un cliente por renglón) en un CSV para el mismo flujo de revisión. */
+function listaComoArchivo(texto: string) {
+  const filas = texto
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const tel = l.match(/\+?\d[\d\s().-]{7,}\d/)?.[0] ?? ""
+      return [l.replace(tel, "").replace(/^[\s,;:|–-]+|[\s,;:|–-]+$/g, ""), tel]
+    })
+  const csv = [["Nombre", "WhatsApp"], ...filas].map((f) => f.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\r\n")
+  return new File([csv], "lista-pegada.csv", { type: "text/csv" })
 }
 
 export function ImportarVista() {
@@ -59,6 +74,7 @@ export function ImportarVista() {
 
 function Importador({ plantilla }: { plantilla: Plantilla }) {
   const entrada = useRef<HTMLInputElement>(null)
+  const [lista, setLista] = useState("")
   const [archivo, setArchivo] = useState<File | null>(null)
   const [rev, setRev] = useState<Revision | null>(null)
   const [solo, setSolo] = useState<EstadoFila | "todas">("todas")
@@ -85,9 +101,10 @@ function Importador({ plantilla }: { plantilla: Plantilla }) {
       const r = await importarDatos(datos(archivo))
       setRev(r)
       if (r.ok) {
-        toast.success(`Se importaron ${cuantos(r.importado ?? 0, unidad)}`)
+        toast.success(`${r.importado === 1 ? "Se importó" : "Se importaron"} ${cuantos(r.importado ?? 0, unidad)}`)
         // Ya quedaron guardados: la siguiente revisión del mismo archivo los marcaría como "Ya existe".
         setArchivo(null)
+        setLista("")
         if (entrada.current) entrada.current.value = ""
       }
     })
@@ -136,6 +153,28 @@ function Importador({ plantilla }: { plantilla: Plantilla }) {
         <input ref={entrada} type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={(e) => elegir(e.currentTarget.files?.[0])} />
       </label>
 
+      {plantilla.tipo === "clientes" && (
+        <div className="flex flex-col gap-2 rounded-xl border px-4 py-3.5">
+          <label htmlFor="lista-clientes" className="text-[13px] font-semibold">
+            O pega una lista
+          </label>
+          <Textarea
+            id="lista-clientes"
+            value={lista}
+            onChange={(e) => setLista(e.target.value)}
+            rows={5}
+            placeholder={"Un cliente por renglón, con su nombre y su WhatsApp:\nCliente Ejemplo 81 0000 0002"}
+            className="text-[13px]"
+          />
+          <div className="flex items-center gap-3">
+            <span className="flex-1 text-[11.5px] text-muted-foreground">Sirve para copiar de sus notas o contactos. También se revisa antes de guardar.</span>
+            <Button variant="outline" disabled={!lista.trim() || ocupado} onClick={() => elegir(listaComoArchivo(lista))}>
+              Revisar lista
+            </Button>
+          </div>
+        </div>
+      )}
+
       {rev?.error && (
         <p role="alert" className="rounded-xl bg-crit-bg px-3.5 py-2.5 text-[13px] font-semibold text-crit">
           {rev.error}
@@ -145,7 +184,7 @@ function Importador({ plantilla }: { plantilla: Plantilla }) {
       {rev?.importado !== undefined && (
         <p role="status" className="flex items-center gap-2 rounded-xl bg-ok-bg px-3.5 py-2.5 text-[13px] font-semibold text-ok">
           <CheckCircle2 className="size-4" aria-hidden />
-          Listo: se importaron {cuantos(rev.importado, unidad)} de {rev.archivo}. Quedó registrado en Actividad.
+          Listo: {rev.importado === 1 ? "se importó" : "se importaron"} {cuantos(rev.importado, unidad)} de {rev.archivo}. Quedó registrado en Actividad.
         </p>
       )}
 

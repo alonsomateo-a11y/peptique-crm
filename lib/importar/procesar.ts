@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { separarNombre } from "@/app/(app)/productos/importar"
 import type { Sesion } from "@/lib/sesion"
+import { NOMBRE_SIN_CLIENTE, WA_SIN_CLIENTE } from "@/lib/cliente-sin-datos"
 import { normalizarWhatsapp, whatsappValido } from "@/lib/telefono"
 
 import { fecha, numero, sinAcentos, type Tabla } from "./leer"
@@ -292,7 +293,7 @@ async function planHistorial(t: Tabla, { admin, sesion }: Ctx): Promise<Plan> {
   const hoy = new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 10)
 
   type Linea = { f: FilaRevisada; producto_id: string; lote_id: string | null; cantidad: number; importe: number }
-  type Venta = { folio: string; fecha: string; cliente: { id?: string; nombre: string; whatsapp: string | null }; vendedor: PersonaMin | null; metodo: "efectivo" | "tarjeta" | "transferencia"; lineas: Linea[]; filas: FilaRevisada[] }
+  type Venta = { folio: string; fecha: string; cliente: { id?: string; nombre: string; whatsapp: string | null }; nombreArchivo: string | null; vendedor: PersonaMin | null; metodo: "efectivo" | "tarjeta" | "transferencia"; lineas: Linea[]; filas: FilaRevisada[] }
   const ventas = new Map<string, Venta>()
   const filas: FilaRevisada[] = []
 
@@ -320,16 +321,27 @@ async function planHistorial(t: Tabla, { admin, sesion }: Ctx): Promise<Plan> {
     f.resumen = `${folio} · ${dia ?? "?"} · ${datos.cliente || "Sin cliente"} · ${p ? `${p.nombre} ${p.presentacion}` : datos.producto || "?"} × ${piezas ?? "?"}`
 
     // Cliente: por WhatsApp, si no por nombre (solo si no hay dos con el mismo nombre).
+    // Sin ninguno de los dos la venta igual cuenta en Reportes: Peptique no tiene base de clientes.
     const wa = normalizarWhatsapp(datos.whatsapp ?? "")
+    const nombreArchivo = (datos.cliente ?? "").trim()
     let cliente: Venta["cliente"] | null = null
-    if (whatsappValido(wa)) cliente = clientePorWa.get(wa) ?? { nombre: datos.cliente ?? "", whatsapp: wa }
+    if (whatsappValido(wa)) cliente = clientePorWa.get(wa) ?? { nombre: nombreArchivo, whatsapp: wa }
     else {
-      const mismos = clientesPorNombre.get(sinAcentos(datos.cliente ?? "")) ?? []
+      const mismos = nombreArchivo ? (clientesPorNombre.get(sinAcentos(nombreArchivo)) ?? []) : []
       if (mismos.length === 1) cliente = mismos[0] as Venta["cliente"]
-      else if (mismos.length > 1) error(f, `Hay ${mismos.length} clientes llamados “${datos.cliente}”; agrega su WhatsApp.`)
-      else error(f, `“${datos.cliente || "Sin nombre"}” no existe; agrega su WhatsApp para darlo de alta.`)
+      else {
+        cliente = clientePorWa.get(WA_SIN_CLIENTE) ?? { nombre: NOMBRE_SIN_CLIENTE, whatsapp: WA_SIN_CLIENTE }
+        f.mensajes.push(
+          mismos.length > 1
+            ? `Hay ${mismos.length} clientes llamados “${nombreArchivo}”: sin WhatsApp no se liga a ninguno. Cuenta en Reportes y el nombre queda en la nota.`
+            : nombreArchivo
+              ? "Sin WhatsApp: cuenta en Reportes y el nombre queda en la nota, sin crear cliente."
+              : "Sin cliente: cuenta en Reportes.",
+        )
+      }
     }
-    if (cliente && !cliente.id && (cliente.nombre ?? "").length < 3) error(f, "Falta el nombre del cliente.")
+    const anonima = cliente.whatsapp === WA_SIN_CLIENTE
+    if (!cliente.id && cliente.nombre.length < 3) error(f, "Falta el nombre del cliente.")
 
     const vendedor = persona(datos.vendio ?? "")
     if (datos.vendio && !vendedor) f.mensajes.push(`No encontramos a “${datos.vendio}”; queda a nombre de quien importa.`)
@@ -342,10 +354,14 @@ async function planHistorial(t: Tabla, { admin, sesion }: Ctx): Promise<Plan> {
     const loteId = p && datos.lote ? (lotePor.get(`${p.id}|${sinAcentos(datos.lote)}`) ?? null) : null
     if (p && datos.lote && !loteId) f.mensajes.push(`No encontramos el lote “${datos.lote}”; se guarda sin lote.`)
 
-    const v = ventas.get(folio) ?? { folio, fecha: dia ?? "", cliente: cliente ?? { nombre: "", whatsapp: null }, vendedor, metodo: metodo ?? "efectivo", lineas: [], filas: [] }
+    const v = ventas.get(folio) ?? { folio, fecha: dia ?? "", cliente, nombreArchivo: anonima ? nombreArchivo || null : null, vendedor, metodo: metodo ?? "efectivo", lineas: [], filas: [] }
     if (ventas.has(folio)) {
       if (dia && v.fecha && dia !== v.fecha) error(f, `El folio ${folioOriginal} tiene otra fecha en otro renglón.`)
-      if (cliente && v.cliente.whatsapp && cliente.whatsapp && cliente.whatsapp !== v.cliente.whatsapp) error(f, `El folio ${folioOriginal} tiene otro cliente en otro renglón.`)
+      // Un renglón sin datos del cliente no contradice a otro del mismo folio que sí los trae.
+      if (v.cliente.whatsapp === WA_SIN_CLIENTE && !anonima) {
+        v.cliente = cliente
+        v.nombreArchivo = null
+      } else if (!anonima && cliente.whatsapp && cliente.whatsapp !== v.cliente.whatsapp) error(f, `El folio ${folioOriginal} tiene otro cliente en otro renglón.`)
     }
     v.filas.push(f)
     if (f.estado !== "error" && p) v.lineas.push({ f, producto_id: p.id, lote_id: loteId, cantidad: piezas!, importe: Math.round(importe! * 100) / 100 })
@@ -359,7 +375,7 @@ async function planHistorial(t: Tabla, { admin, sesion }: Ctx): Promise<Plan> {
     return !mala && v.lineas.length > 0
   })
   const clientesNuevos = new Set(validas.filter((v) => !v.cliente.id).map((v) => v.cliente.whatsapp))
-  for (const v of validas) if (!v.cliente.id) v.filas[0].mensajes.push("Cliente nuevo: se da de alta.")
+  for (const v of validas) if (!v.cliente.id && v.cliente.whatsapp !== WA_SIN_CLIENTE) v.filas[0].mensajes.push("Cliente nuevo: se da de alta.")
 
   return {
     filas,
@@ -391,7 +407,7 @@ async function planHistorial(t: Tabla, { admin, sesion }: Ctx): Promise<Plan> {
             forma_pago: "completo",
             total: Math.round(v.lineas.reduce((s, l) => s + l.importe, 0) * 100) / 100,
             etiquetas: [ETIQUETA_IMPORTADA],
-            nota: "Importada del historial",
+            nota: v.nombreArchivo ? `Importada del historial · Cliente en el archivo: ${v.nombreArchivo}` : "Importada del historial",
             creado_en: `${v.fecha}T12:00:00-06:00`,
           }
         })

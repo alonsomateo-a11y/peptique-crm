@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { WA_SIN_CLIENTE } from "@/lib/cliente-sin-datos"
 import { KpiCard } from "@/components/app/kpi-card"
 import { PageHeader } from "@/components/app/page-header"
 import { formatoMoneda } from "@/lib/format"
@@ -29,7 +30,7 @@ export default async function Ventas({ searchParams }: PageProps<"/ventas">) {
   const [ventas, { productos }, clientes] = await Promise.all([
     cargarVentas(),
     cargarMostrador(),
-    supabase.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").order("nombre"),
+    supabase.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").neq("whatsapp", WA_SIN_CLIENTE).order("nombre"),
   ])
   const mes = mesActual()
   const delMes = ventas.filter((v) => cuentaParaReportes(v.estado) && v.dia.slice(0, 7) === mes)

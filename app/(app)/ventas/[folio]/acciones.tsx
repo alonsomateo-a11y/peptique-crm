@@ -6,6 +6,7 @@ import { AlertTriangle, Ban, Check, Loader2, MessageCircle, PackageCheck, Wallet
 import { toast } from "sonner"
 
 import { Campo } from "@/components/app/campo"
+import { WA_SIN_CLIENTE } from "@/lib/cliente-sin-datos"
 import { Drawer, DrawerCuerpo, DrawerPie } from "@/components/app/drawer"
 import { Segmentado } from "@/components/app/segmentado"
 import { Button } from "@/components/ui/button"
@@ -67,7 +68,7 @@ export function AccionesVenta({
 
   return (
     <div className="flex flex-wrap gap-2">
-      {cliente && ligaDocumentos && (
+      {cliente && cliente.whatsapp !== WA_SIN_CLIENTE && ligaDocumentos && (
         <Button variant="outline" size="lg" asChild>
           <a
             href={ligaWhatsapp(cliente.whatsapp, `Hola ${cliente.nombre.split(" ")[0]}, aquí puedes ver el certificado de análisis (COA) de tu compra ${venta.folio}${lotes.length ? ` (lote ${[...new Set(lotes)].join(", ")})` : ""} y tu protocolo: ${ligaDocumentos}`)}

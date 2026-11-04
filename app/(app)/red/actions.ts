@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { formatoMoneda } from "@/lib/format"
 import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { normalizarWhatsapp, whatsappValido } from "@/lib/telefono"
@@ -58,4 +59,36 @@ export async function darDeBaja(personaId: string, motivo: string): Promise<{ er
   revalidatePath("/red")
   revalidatePath(`/red/${personaId}`)
   return { bajas: ids.length }
+}
+
+/**
+ * Marca como pagadas exactamente las comisiones que el administrador vio en pantalla:
+ * si entró una nueva mientras tanto, se queda por pagar. Todas comparten pagada_en y así forman un pago.
+ */
+export async function pagarComisiones(personaId: string, ids: string[]): Promise<{ error?: string }> {
+  const s = await sesionRed()
+  if (s?.perfil !== "administrador") return { error: "Solo el administrador marca pagos." }
+  if (!uuid.test(personaId) || !ids.length || !ids.every((i) => uuid.test(i))) return { error: "Datos no válidos." }
+  const admin = crearClienteAdmin()
+  const { data, error } = await admin.from("comisiones").update({ pagada_en: new Date().toISOString() }).in("id", ids).eq("persona_id", personaId).is("pagada_en", null).select("monto")
+  if (error) return { error: "No se pudo registrar el pago." }
+  if (!data?.length) return { error: "Estas comisiones ya estaban pagadas." }
+  const { data: p } = await admin.from("personas").select("nombre").eq("id", personaId).maybeSingle()
+  const total = data.reduce((t, c) => t + Number(c.monto), 0)
+  await admin.from("bitacora").insert({ persona_id: s.personaId, perfil: s.perfil, area: "red", accion: `marcó pagada la comisión de ${p?.nombre ?? "—"}: ${formatoMoneda(total)} (${data.length})`, entidad: "persona", entidad_id: personaId })
+  revalidatePath("/red", "layout")
+  return {}
+}
+
+export async function deshacerPagoComisiones(personaId: string, pagadaEn: string): Promise<{ error?: string }> {
+  const s = await sesionRed()
+  if (s?.perfil !== "administrador") return { error: "Solo el administrador marca pagos." }
+  if (!uuid.test(personaId) || Number.isNaN(Date.parse(pagadaEn))) return { error: "Datos no válidos." }
+  const admin = crearClienteAdmin()
+  const { data, error } = await admin.from("comisiones").update({ pagada_en: null }).eq("persona_id", personaId).eq("pagada_en", pagadaEn).select("monto")
+  if (error || !data?.length) return { error: "No se pudo deshacer el pago." }
+  const { data: p } = await admin.from("personas").select("nombre").eq("id", personaId).maybeSingle()
+  await admin.from("bitacora").insert({ persona_id: s.personaId, perfil: s.perfil, area: "red", accion: `deshizo el pago de comisión de ${p?.nombre ?? "—"}: ${formatoMoneda(data.reduce((t, c) => t + Number(c.monto), 0))}`, entidad: "persona", entidad_id: personaId })
+  revalidatePath("/red", "layout")
+  return {}
 }

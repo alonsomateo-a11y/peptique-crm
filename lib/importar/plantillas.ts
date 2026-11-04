@@ -34,7 +34,7 @@ export const PLANTILLAS: Plantilla[] = [
   {
     tipo: "clientes",
     titulo: "Clientes",
-    descripcion: "Base de clientes. Si el WhatsApp ya existe, el cliente no se duplica.",
+    descripcion: "Sube un Excel o pega una lista de nombres y WhatsApp. Si el WhatsApp ya existe, el cliente no se duplica.",
     orden: "Segundo",
     columnas: [
       { clave: "nombre", titulo: "Nombre", alias: ["cliente", "nombre completo", "paciente"], requerida: true, ejemplo: "Cliente Ejemplo" },
@@ -66,13 +66,13 @@ export const PLANTILLAS: Plantilla[] = [
     tipo: "historial",
     titulo: "Historial de ventas",
     descripcion:
-      "Un renglón por producto vendido; los renglones con el mismo folio forman una venta. Entran como entregadas y pagadas, sin mover el inventario de hoy ni generar comisiones.",
+      "Opcional. Un renglón por producto vendido; los renglones con el mismo folio forman una venta. Entran como entregadas y pagadas, sin mover el inventario de hoy ni generar comisiones. El cliente no es obligatorio: sin WhatsApp la venta cuenta en Reportes sin crear cliente.",
     orden: "Al final",
     columnas: [
       { clave: "folio", titulo: "Folio", alias: ["numero de venta", "no venta", "venta", "ticket", "orden"], ejemplo: "1001", ayuda: "Vacío = cada renglón es una venta" },
       { clave: "fecha", titulo: "Fecha", alias: ["fecha de venta", "dia"], requerida: true, ejemplo: "2026-09-15" },
-      { clave: "cliente", titulo: "Cliente", alias: ["nombre", "nombre del cliente", "paciente"], requerida: true, ejemplo: "Cliente Ejemplo" },
-      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel"], ejemplo: "8100000002", ayuda: "Obligatorio si el cliente no existe todavía" },
+      { clave: "cliente", titulo: "Cliente", alias: ["nombre", "nombre del cliente", "paciente"], ejemplo: "Cliente Ejemplo", ayuda: "Si no lo tienen, déjenlo vacío" },
+      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel"], ejemplo: "8100000002", ayuda: "Con WhatsApp se da de alta el cliente" },
       { clave: "producto", titulo: "Producto", alias: ["nombre del producto", "articulo"], requerida: true, ejemplo: "BPC-157 10 mg" },
       { clave: "presentacion", titulo: "Presentación", alias: ["mg", "dosis"], ejemplo: "" },
       { clave: "piezas", titulo: "Piezas", alias: ["cantidad", "pzas"], requerida: true, ejemplo: "1" },

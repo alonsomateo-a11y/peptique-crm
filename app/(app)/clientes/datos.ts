@@ -1,5 +1,6 @@
 import "server-only"
 
+import { WA_SIN_CLIENTE } from "@/lib/cliente-sin-datos"
 import { crearClienteServidor } from "@/lib/supabase/server"
 
 import type { ClienteFila } from "./tipos"
@@ -14,7 +15,7 @@ const inicioMes = () => {
 export async function cargarClientes(): Promise<{ clientes: ClienteFila[]; indicadores: Indicadores; vendedores: { id: string; nombre: string }[]; ahora: number }> {
   const supabase = await crearClienteServidor()
   const [clientes, ventas, personas] = await Promise.all([
-    supabase.from("clientes").select("*").order("nombre"),
+    supabase.from("clientes").select("*").neq("whatsapp", WA_SIN_CLIENTE).order("nombre"),
     supabase.from("ventas").select("cliente_id, total, creado_en, estado").not("estado", "in", "(cancelada,esperando_pago)"),
     supabase.from("personas").select("id, nombre"),
   ])

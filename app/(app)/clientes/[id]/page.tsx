@@ -3,6 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { MessageCircle, Store } from "lucide-react"
 
+import { WA_SIN_CLIENTE } from "@/lib/cliente-sin-datos"
 import { Estado } from "@/components/app/estado"
 import { KpiCard } from "@/components/app/kpi-card"
 import { PageHeader } from "@/components/app/page-header"
@@ -41,7 +42,7 @@ export default async function FichaCliente({ params }: PageProps<"/clientes/[id]
     supabase.from("avisos_recompra").select("id, se_le_acaba, siguiente_etapa, estado, productos(nombre, presentacion)").eq("cliente_id", id),
     supabase.from("bitacora").select("id, creado_en, accion, persona_id").eq("entidad", "cliente").eq("entidad_id", id),
     supabase.from("personas").select("id, nombre"),
-    supabase.from("clientes").select("id, nombre, whatsapp"),
+    supabase.from("clientes").select("id, nombre, whatsapp").neq("whatsapp", WA_SIN_CLIENTE),
   ])
   const quien = new Map((personas.data ?? []).map((p) => [p.id, p.nombre]))
 

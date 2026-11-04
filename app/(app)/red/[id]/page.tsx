@@ -51,7 +51,7 @@ export default async function PersonaRed({ params }: PageProps<"/red/[id]">) {
 
       <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard etiqueta="Vendido · mes" valor={formatoMoneda(p.vendidoMes)} contexto={p.ventasMes === 1 ? "1 venta pagada" : `${p.ventasMes} ventas pagadas`} />
-        <KpiCard etiqueta="Comisión del mes" valor={formatoMoneda(p.comisionMes)} contexto={`por pagar en total: ${formatoMoneda(pendiente)}`} />
+        <KpiCard etiqueta="Comisión del mes" valor={formatoMoneda(p.comisionMes)} contexto={`por pagar en total: ${formatoMoneda(pendiente)}`} href="/red/comisiones" />
         <KpiCard etiqueta="Clientes" valor={String(clientes.count ?? 0)} contexto="asignados a esta persona" />
         <KpiCard etiqueta="Pagos en camino" valor={String(p.esperando)} contexto="apartados esperando pago" />
       </section>

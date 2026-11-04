@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 
+import { WA_SIN_CLIENTE } from "@/lib/cliente-sin-datos"
 import { formatoMonedaCentavos } from "@/lib/format"
 import { ligaDocumentos } from "@/lib/documentos"
 import { obtenerSesion } from "@/lib/sesion"
@@ -50,7 +51,7 @@ export async function buscarClientes(q: string): Promise<ClienteMostrador[]> {
   const admin = crearClienteAdmin()
   const digitos = texto.replace(/\D/g, "")
   const filtro = digitos.length >= 3 ? `whatsapp.ilike.%${digitos}%` : `nombre.ilike.%${texto.replace(/[%_,()]/g, "")}%`
-  let consulta = admin.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").or(filtro)
+  let consulta = admin.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").neq("whatsapp", WA_SIN_CLIENTE).or(filtro)
   if (s.esRed) consulta = consulta.eq("vendedor_id", s.personaId)
   const { data } = await consulta.order("nombre").limit(8)
   return (data ?? []).map((c) => ({ id: c.id, nombre: c.nombre, whatsapp: c.whatsapp, tipo: c.tipo, waiver: !!c.waiver_firmado_en, planDosis: false }))

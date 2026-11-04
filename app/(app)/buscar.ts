@@ -1,5 +1,6 @@
 "use server"
 
+import { WA_SIN_CLIENTE } from "@/lib/cliente-sin-datos"
 import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { formatoWhatsapp } from "@/lib/telefono"
@@ -23,6 +24,7 @@ export async function buscarGlobal(q: string): Promise<Resultado[]> {
     admin
       .from("clientes")
       .select("id, nombre, whatsapp")
+      .neq("whatsapp", WA_SIN_CLIENTE)
       .or(digitos.length >= 3 ? `nombre.ilike.%${texto}%,whatsapp.ilike.%${digitos}%` : `nombre.ilike.%${texto}%`)
       .limit(5),
     admin.from("ventas").select("folio, total, clientes(nombre)").ilike("folio", `%${texto}%`).limit(5),
