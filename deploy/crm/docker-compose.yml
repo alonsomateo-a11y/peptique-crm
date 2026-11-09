@@ -1,0 +1,16 @@
+# CRM en el servidor. La imagen se compila en la Mac (ver Dockerfile) y se sube con docker save | ssh docker load.
+# Habla con Supabase por la red interna de Docker (kong:8000) y solo escucha en 127.0.0.1:3200, detrás de nginx.
+services:
+  crm:
+    image: peptique-crm:actual
+    container_name: peptique-crm
+    restart: unless-stopped
+    env_file: crm.env # SUPABASE_SECRET_KEY, DOCUMENTOS_SECRET, SUPABASE_URL_PUBLICA=https://crm.peptique.com.mx, REQUIERE_SESION=1
+    ports:
+      - "127.0.0.1:3200:3000"
+    mem_limit: 512m
+    networks: [supabase]
+networks:
+  supabase:
+    external: true
+    name: supabase_default

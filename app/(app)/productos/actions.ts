@@ -10,6 +10,7 @@ import { crearClienteServidor } from "@/lib/supabase/server"
 
 import type { CambioImportacion } from "./datos-cliente"
 import { claveProducto, leerCatalogo } from "./importar"
+import { urlPublica } from "@/lib/supabase/url-publica"
 
 export type ResultadoProducto = { ok?: boolean; error?: string; errores?: Record<string, string> } | null
 
@@ -118,7 +119,7 @@ export async function enlaceProtocolo(ruta: string): Promise<string | null> {
   const sesion = await obtenerSesion()
   if (sesion.perfil !== "administrador" || !/^[0-9a-f-]{36}\/etapa-[1-3]\.pdf$/.test(ruta)) return null
   const { data } = await crearClienteAdmin().storage.from("protocolos").createSignedUrl(ruta, 60)
-  return data?.signedUrl ?? null
+  return data ? urlPublica(data.signedUrl) : null
 }
 
 export type ResultadoImportacion = { cambios?: CambioImportacion[]; importados?: { nuevos: number; precios: number }; error?: string }

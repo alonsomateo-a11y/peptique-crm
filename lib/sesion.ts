@@ -16,8 +16,11 @@ const ZONA = "America/Monterrey"
 
 const DEMO: Sesion = { personaId: "demo", nombre: "Admin", iniciales: "AD", perfil: "administrador" }
 
-/** Se exige sesión solo cuando Supabase está configurado y REQUIERE_SESION=1. */
-export const sesionActiva = () => supabaseConfigurado() && process.env.REQUIERE_SESION === "1"
+/**
+ * Se exige sesión cuando Supabase está configurado y REQUIERE_SESION=1. En producción siempre:
+ * si a un servidor le falta la variable, nadie debe entrar como administrador de demostración.
+ */
+export const sesionActiva = () => supabaseConfigurado() && (process.env.REQUIERE_SESION === "1" || process.env.NODE_ENV === "production")
 
 export const iniciales = (nombre: string) =>
   nombre
@@ -37,7 +40,7 @@ const dia = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: ZONA }).fo
  *  - La sesión dura el turno: vale solo el mismo día (hora de Monterrey) en que se abrió; a las 23:59 se cierra.
  *  - El perfil temporal además vence en su fecha.
  *  - El administrador puede cerrar sesiones a distancia (personas.sesion_minima).
- * Sin Supabase o con REQUIERE_SESION distinto de "1", regresa un administrador de demostración.
+ * Sin Supabase, o en desarrollo con REQUIERE_SESION distinto de "1", regresa un administrador de demostración.
  */
 export async function obtenerSesion(): Promise<Sesion> {
   if (!sesionActiva()) return DEMO

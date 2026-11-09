@@ -6,6 +6,7 @@ import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 
 import type { Zona } from "./tipos"
+import { urlPublica } from "@/lib/supabase/url-publica"
 
 const uuid = /^[0-9a-f-]{36}$/
 const TIPOS: Record<string, string> = { "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg" }
@@ -27,7 +28,7 @@ export async function ligaOriginal(loteId: string): Promise<{ url?: string; tipo
   const { data: l } = await admin.from("lotes").select("coa_original_path").eq("id", loteId).single()
   if (!l?.coa_original_path) return { error: "Este lote no tiene COA original." }
   const { data } = await admin.storage.from("coas").createSignedUrl(l.coa_original_path, 120)
-  return data ? { url: data.signedUrl, tipo: l.coa_original_path.split(".").pop() } : { error: "No se pudo abrir el COA." }
+  return data ? { url: urlPublica(data.signedUrl), tipo: l.coa_original_path.split(".").pop() } : { error: "No se pudo abrir el COA." }
 }
 
 export async function ligaPublico(loteId: string): Promise<{ url?: string; error?: string }> {
@@ -36,7 +37,7 @@ export async function ligaPublico(loteId: string): Promise<{ url?: string; error
   const { data: l } = await admin.from("lotes").select("coa_publico_path").eq("id", loteId).single()
   if (!l?.coa_publico_path) return { error: "Aún no hay COA público." }
   const { data } = await admin.storage.from("coas").createSignedUrl(l.coa_publico_path, 300)
-  return data ? { url: data.signedUrl } : { error: "No se pudo abrir el COA." }
+  return data ? { url: urlPublica(data.signedUrl) } : { error: "No se pudo abrir el COA." }
 }
 
 export async function subirOriginal(form: FormData): Promise<{ error?: string }> {

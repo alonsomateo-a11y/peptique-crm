@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { leerToken } from "@/lib/documentos"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
+import { urlPublica } from "@/lib/supabase/url-publica"
 
 /** Abre un documento de la compra con una liga de Storage que dura 2 minutos. Solo COA público y protocolo. */
 export async function GET(_req: Request, { params }: { params: Promise<{ token: string; doc: string }> }) {
@@ -29,5 +30,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   if (!ruta) return new NextResponse("Documento en preparación.", { status: 404 })
   const { data } = await admin.storage.from(bucket).createSignedUrl(ruta, 120)
   if (!data) return new NextResponse("No se pudo abrir el documento.", { status: 500 })
-  return NextResponse.redirect(data.signedUrl)
+  return NextResponse.redirect(urlPublica(data.signedUrl))
 }

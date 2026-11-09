@@ -1,0 +1,19 @@
+# Peptique CRM sobre el Supabase oficial (supabase/docker). Solo se levantan las piezas que usa el CRM:
+#   docker compose up -d db auth rest storage api-gw
+# En .env: COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml (si no, este archivo se ignora).
+# Nada queda publicado fuera del servidor: la API solo escucha en 127.0.0.1 y nginx deja pasar
+# únicamente las ligas firmadas (/storage/v1/object/sign/).
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    depends_on: !reset [] # sin el panel (studio); se prende a mano por túnel SSH si hace falta
+  storage:
+    depends_on: !override
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_started
+    environment:
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+      FILE_SIZE_LIMIT: 12582912
