@@ -2,7 +2,7 @@
 # Respaldo nocturno del CRM en el servidor: base de datos completa y archivos (COA y protocolos),
 # cifrados con la llave pública de age. La llave privada vive solo en la Mac: el servidor no puede
 # leer sus propios respaldos. Se guardan 14 días aquí; la Mac baja cada noche el más reciente.
-# Cron (3:00 a. m. de Monterrey): 0 9 * * * /opt/peptique/respaldo.sh >> /opt/peptique/respaldos/respaldo.log 2>&1
+# Cron (el servidor está en hora de Monterrey): 0 3 * * * /opt/peptique/respaldo.sh >> /opt/peptique/respaldos/respaldo.log 2>&1
 set -eu
 BASE=/opt/peptique
 DIR=$BASE/respaldos
