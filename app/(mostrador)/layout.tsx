@@ -23,7 +23,7 @@ export default async function LayoutMostrador({ children }: { children: React.Re
             <b className="font-serif text-[17px] font-semibold">Mostrador</b>
             <span className="block text-[12px] text-muted-foreground">{sesion.nombre}</span>
           </div>
-          <Link href="/salir" className="text-[12.5px] font-semibold text-muted-foreground hover:text-foreground">
+          <Link href="/salir" prefetch={false} className="text-[12.5px] font-semibold text-muted-foreground hover:text-foreground">
             Salir
           </Link>
           <span className="inline-flex size-9 items-center justify-center rounded-full bg-bruma text-[12px] font-extrabold">{sesion.iniciales}</span>

@@ -37,7 +37,7 @@ export default async function AjustesRed() {
       <div className="grid grid-cols-2 gap-2.5">
         <CambiarPin />
         <Button variant="outline" size="lg" className="h-12" asChild>
-          <Link href="/salir">Cerrar sesión</Link>
+          <Link href="/salir" prefetch={false}>Cerrar sesión</Link>
         </Button>
       </div>
     </>
