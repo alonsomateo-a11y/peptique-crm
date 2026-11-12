@@ -13,8 +13,8 @@ export async function GET(request: NextRequest) {
     const supabase = await crearClienteServidor()
     await supabase.auth.signOut()
   }
-  const url = new URL("/entrar", request.url)
+  // Liga relativa: detrás de nginx, request.url trae la dirección interna del contenedor (0.0.0.0:3000).
   const motivo = request.nextUrl.searchParams.get("motivo")
-  if (motivo) url.searchParams.set("motivo", motivo)
-  return NextResponse.redirect(url)
+  const destino = motivo ? `/entrar?motivo=${encodeURIComponent(motivo)}` : "/entrar"
+  return new NextResponse(null, { status: 307, headers: { Location: destino, "Cache-Control": "no-store" } })
 }
