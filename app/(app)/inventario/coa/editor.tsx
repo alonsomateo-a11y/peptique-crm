@@ -1,14 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState, useTransition } from "react"
-import { AlertTriangle, Check, Eye, FileText, Loader2, Save, Trash2, Upload } from "lucide-react"
+import { AlertTriangle, Check, Eye, FileText, FlaskConical, Loader2, Plus, Save, Trash2, Upload } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
-import { aprobarCoa, guardarZonas, ligaOriginal, ligaPublico, subirOriginal, zonasSugeridas } from "./actions"
+import { aprobarCoa, crearFormato, elegirFormato, guardarZonas, ligaOriginal, ligaPublico, subirOriginal, zonasSugeridas, type FormatoCoa } from "./actions"
 import type { Pagina } from "./render"
 import { TEXTO_FRANJA, ZONAS_REQUERIDAS, type Zona } from "./tipos"
 
@@ -25,6 +25,8 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
   const [ocupado, iniciar] = useTransition()
   const [listo, setListo] = useState(tienePublico)
   const [confirmar, setConfirmar] = useState(false)
+  const [formatos, setFormatos] = useState<FormatoCoa[]>([])
+  const [formatoId, setFormatoId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!tieneOriginal || !tipoOriginal) return
@@ -38,7 +40,11 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
         if (!vivo) return
         setPaginas(p)
         setZonas(sug.zonas.filter((z) => z.pagina < p.length))
-        if (sug.origen === "anterior") setAviso(`Usamos las zonas del COA de ${sug.lote}. Revísalas: si el formato cambió, ajústalas.`)
+        setFormatos(sug.formatos)
+        setFormatoId(sug.formatoId)
+        if (sug.origen === "formato") setAviso(`Usamos el formato de ${sug.lote}. Revisa que cada franja caiga en su lugar; si el laboratorio cambió su COA, ajústalas.`)
+        if (sug.origen === "anterior") setAviso(`Usamos las zonas del COA de ${sug.lote}. Revísalas: si es de otro laboratorio, caerán en otro lugar.`)
+        if (sug.origen === "elegir") setAviso("¿De qué laboratorio es este COA? Elígelo en «Laboratorio» y las franjas se ponen solas. Si es uno nuevo, márcalas a mano y créalo ahí mismo.")
       } catch (err) {
         if (vivo) setError(err instanceof Error ? err.message : "No se pudo abrir el COA.")
       }
@@ -153,6 +159,22 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
         </section>
 
         <aside className="flex flex-col gap-3 xl:sticky xl:top-4">
+          <Laboratorio
+            loteId={loteId}
+            formatos={formatos}
+            formatoId={formatoId}
+            zonas={zonas}
+            listo={!!paginas}
+            onFormatos={setFormatos}
+            onFormato={(id, zs, nombre) => {
+              setFormatoId(id)
+              if (zs?.length && paginas) {
+                setZonas(zs.filter((z) => z.pagina < paginas.length))
+                setElegida(null)
+                setAviso(`Usamos el formato de ${nombre}. Revisa que cada franja caiga en su lugar.`)
+              } else setAviso(null)
+            }}
+          />
           <section aria-labelledby="titulo-tapar" className="flex flex-col gap-2 rounded-2xl border bg-card p-4">
             <h2 id="titulo-tapar" className="text-lg font-medium">
               Qué se tapa
@@ -257,6 +279,109 @@ export function EditorCoa({ loteId, tieneOriginal, tienePublico, tipoOriginal }:
         </aside>
       </div>
     </>
+  )
+}
+
+function Laboratorio({
+  loteId,
+  formatos,
+  formatoId,
+  zonas,
+  listo,
+  onFormatos,
+  onFormato,
+}: {
+  loteId: string
+  formatos: FormatoCoa[]
+  formatoId: string | null
+  zonas: Zona[]
+  listo: boolean
+  onFormatos: (f: FormatoCoa[]) => void
+  onFormato: (id: string | null, zonas: Zona[] | undefined, nombre: string) => void
+}) {
+  const [nuevo, setNuevo] = useState(false)
+  const [nombre, setNombre] = useState("")
+  const [ocupado, iniciar] = useTransition()
+  const actual = formatos.find((f) => f.id === formatoId)
+
+  function elegir(valor: string) {
+    if (valor === "__nuevo") return setNuevo(true)
+    setNuevo(false)
+    const id = valor || null
+    const f = formatos.find((x) => x.id === id)
+    if (f && f.zonas > 0 && zonas.length > 0 && !window.confirm(`¿Cambiar las ${zonas.length} zonas marcadas por las del formato de ${f.nombre}?`)) return
+    iniciar(async () => {
+      const r = await elegirFormato(loteId, id)
+      if (r.error) return void toast.error(r.error)
+      onFormato(id, r.zonas, f?.nombre ?? "")
+    })
+  }
+
+  function crear() {
+    iniciar(async () => {
+      const r = await crearFormato(loteId, nombre, zonas)
+      if (r.error || !r.formato) return void toast.error(r.error ?? "No se pudo crear el formato.")
+      onFormatos([...formatos, r.formato].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")))
+      onFormato(r.formato.id, undefined, r.formato.nombre)
+      setNuevo(false)
+      setNombre("")
+      toast.success(`Formato «${r.formato.nombre}» creado`)
+    })
+  }
+
+  return (
+    <section aria-labelledby="titulo-lab" className="flex flex-col gap-2 rounded-2xl border bg-card p-4">
+      <h2 id="titulo-lab" className="flex items-center gap-2 text-lg font-medium">
+        <FlaskConical className="size-4 text-muted-foreground" aria-hidden />
+        Laboratorio
+      </h2>
+      <label htmlFor="formato-coa" className="text-[12px] text-muted-foreground">
+        Cada laboratorio acomoda su COA distinto. Al elegirlo, las franjas se ponen solas.
+      </label>
+      <select
+        id="formato-coa"
+        value={nuevo ? "__nuevo" : (formatoId ?? "")}
+        disabled={ocupado || !listo}
+        onChange={(e) => elegir(e.target.value)}
+        className="h-10 rounded-[10px] border bg-card px-3 text-[13.5px] font-semibold"
+      >
+        <option value="">Sin formato</option>
+        {formatos.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.nombre}
+            {f.zonas ? ` · ${f.zonas} zonas` : " · sin zonas aún"}
+          </option>
+        ))}
+        <option value="__nuevo">+ Nuevo laboratorio…</option>
+      </select>
+      {nuevo && (
+        <div className="flex flex-col gap-2 rounded-xl bg-hueso p-3">
+          <label htmlFor="nombre-lab" className="text-[12px] font-semibold">
+            Nombre del laboratorio
+          </label>
+          <input
+            id="nombre-lab"
+            value={nombre}
+            maxLength={60}
+            autoFocus
+            onChange={(e) => setNombre(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && nombre.trim().length >= 2 && crear()}
+            className="h-9 rounded-lg border bg-card px-2.5 text-[13.5px]"
+          />
+          <span className="text-[11.5px] text-muted-foreground">Se guarda con las {zonas.length} zonas que tienes marcadas. Solo lo ve el administrador.</span>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={ocupado || nombre.trim().length < 2} onClick={crear}>
+              {ocupado ? <Loader2 className="animate-spin" aria-hidden /> : <Plus aria-hidden />}
+              Crear formato
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setNuevo(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+      {actual && !nuevo && <span className="text-[11.5px] text-muted-foreground">Al aprobar, estas zonas quedan como el formato de {actual.nombre} para el siguiente COA.</span>}
+    </section>
   )
 }
 
