@@ -9,7 +9,7 @@ import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { crearClienteServidor } from "@/lib/supabase/server"
 
 import type { CambioImportacion } from "./datos-cliente"
-import { claveProducto, leerCatalogo } from "./importar"
+import { compararPrecios, leerCatalogo } from "./importar"
 import { urlPublica } from "@/lib/supabase/url-publica"
 
 export type ResultadoProducto = { ok?: boolean; error?: string; errores?: Record<string, string> } | null
@@ -141,17 +141,7 @@ async function compararCatalogo(form: FormData): Promise<ResultadoImportacion> {
 
   const supabase = await crearClienteServidor()
   const { data: actuales } = await supabase.from("productos").select("id, nombre, presentacion, sku, familia, precio_publico, precio_medico, precio_distribuidor")
-  const porClave = new Map((actuales ?? []).map((p) => [claveProducto(p.nombre, p.presentacion), p]))
-  const igual = (a: number | string | null, b: number | null) => (a === null ? null : Number(a)) === b
-
-  return {
-    cambios: filas.map((f) => {
-      const p = porClave.get(claveProducto(f.nombre, f.presentacion))
-      if (!p) return { ...f, tipo: "nuevo" as const }
-      const mismo = igual(p.precio_publico, f.precio_publico) && igual(p.precio_medico, f.precio_medico) && igual(p.precio_distribuidor, f.precio_distribuidor)
-      return { ...f, sku: p.sku ?? f.sku, tipo: mismo ? ("igual" as const) : ("precio" as const), id: p.id }
-    }),
-  }
+  return { cambios: compararPrecios(filas, actuales ?? []) }
 }
 
 export async function previsualizarCatalogo(form: FormData): Promise<ResultadoImportacion> {
@@ -160,7 +150,7 @@ export async function previsualizarCatalogo(form: FormData): Promise<ResultadoIm
   return compararCatalogo(form)
 }
 
-/** Agrega los productos nuevos y actualiza precios. No toca familia, protocolos ni estado de los existentes (salvo ocultar si quedan sin precio). */
+/** Agrega los productos nuevos (ocultos) y actualiza precios. Una celda vacía no borra el precio. No toca familia, protocolos ni si está visible. */
 export async function importarCatalogo(form: FormData): Promise<ResultadoImportacion> {
   const sesion = await obtenerSesion()
   if (sesion.perfil !== "administrador") return { error: "Solo el administrador puede importar el catálogo." }
@@ -179,15 +169,15 @@ export async function importarCatalogo(form: FormData): Promise<ResultadoImporta
         precio_publico,
         precio_medico,
         precio_distribuidor,
-        visible: precio_publico !== null,
+        // Un producto que no estaba suele ser un nombre mal escrito: entra oculto hasta revisarlo.
+        visible: false,
       })),
     )
     if (e) return { error: "No se pudieron agregar los productos nuevos." }
   }
   const precios = cambios.filter((c) => c.tipo === "precio")
   for (const c of precios) {
-    const cambio: Record<string, unknown> = { precio_publico: c.precio_publico, precio_medico: c.precio_medico, precio_distribuidor: c.precio_distribuidor }
-    if (c.precio_publico === null) cambio.visible = false
+    const cambio = { precio_publico: c.precio_publico, precio_medico: c.precio_medico, precio_distribuidor: c.precio_distribuidor }
     const { error: e } = await supabase.from("productos").update(cambio).eq("id", c.id!)
     if (e) return { error: `No se pudo actualizar ${c.nombre} ${c.presentacion}.` }
   }

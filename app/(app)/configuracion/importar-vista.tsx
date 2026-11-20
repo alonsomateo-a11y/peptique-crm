@@ -46,7 +46,7 @@ export function ImportarVista() {
             Importar datos desde Excel
           </h2>
           <p className="text-[13px] text-muted-foreground">
-            Sube su Excel tal como lo tengan: reconocemos las columnas por su nombre. Antes de guardar, se revisa renglón por renglón y no se duplica lo que ya existe. Importen en este orden:
+            Sube su Excel tal como lo tengan: reconocemos las columnas por su nombre. Antes de guardar, se revisa renglón por renglón y no se duplica lo que ya existe. La lista de precios va en Productos → Importar precios, antes del inventario. Importen en este orden:
           </p>
         </div>
         <div role="tablist" aria-label="Qué importar" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

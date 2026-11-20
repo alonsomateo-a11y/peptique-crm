@@ -12,11 +12,25 @@ import { formatoMoneda } from "@/lib/format"
 
 import { importarCatalogo, previsualizarCatalogo, type ResultadoImportacion } from "./actions"
 
+import type { CambioImportacion, Precios } from "./datos-cliente"
+
 const precio = (n: number | null) => (n === null ? <span className="text-muted-foreground">—</span> : formatoMoneda(n))
+
+/** Precio nuevo y, si cambia, el anterior tachado. */
+function Celda({ c, k }: { c: CambioImportacion; k: keyof Precios }) {
+  const antes = c.antes?.[k] ?? null
+  return (
+    <>
+      {precio(c[k])}
+      {c.tipo === "precio" && antes !== c[k] && <s className="block text-[11px] text-muted-foreground">{antes === null ? "sin precio" : formatoMoneda(antes)}</s>}
+    </>
+  )
+}
 
 export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; onOpenChange: (v: boolean) => void }) {
   const [archivo, setArchivo] = useState<File | null>(null)
   const [res, setRes] = useState<ResultadoImportacion | null>(null)
+  const [revisado, setRevisado] = useState(false)
   const [leyendo, iniciarLectura] = useTransition()
   const [guardando, iniciarGuardado] = useTransition()
 
@@ -29,6 +43,7 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
   function elegir(f: File | undefined) {
     setArchivo(f ?? null)
     setRes(null)
+    setRevisado(false)
     if (f) iniciarLectura(async () => setRes(await previsualizarCatalogo(datos(f))))
   }
 
@@ -46,10 +61,10 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
   const cambios = res?.cambios ?? []
   const nuevos = cambios.filter((c) => c.tipo === "nuevo").length
   const precios = cambios.filter((c) => c.tipo === "precio").length
-  const sinPrecio = cambios.filter((c) => c.tipo === "nuevo" && c.precio_publico === null).length
+  const conAviso = cambios.filter((c) => c.avisos.length > 0).length
 
   return (
-    <Drawer abierto={abierto} onOpenChange={onOpenChange} titulo="Importar catálogo" descripcion="Desde el Excel de precios. Revisa antes de guardar.">
+    <Drawer abierto={abierto} onOpenChange={onOpenChange} titulo="Importar lista de precios" descripcion="Desde el Excel de precios. Revisa antes de guardar.">
       <DrawerCuerpo>
         <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed bg-hueso-2 px-4 py-4 has-focus-visible:ring-3 has-focus-visible:ring-ring">
           <span className="inline-flex size-10 items-center justify-center rounded-xl bg-card">
@@ -57,7 +72,7 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
           </span>
           <span className="min-w-0 flex-1">
             <b className="block truncate text-sm">{archivo ? archivo.name : "Elegir archivo .xlsx"}</b>
-            <span className="text-[11.5px] text-muted-foreground">Columnas Producto, $ Web, $ Medico y $ Distribuidor (precios con IVA)</span>
+            <span className="text-[11.5px] text-muted-foreground">Columnas Producto y Precio público; Médico y Distribuidor son opcionales (precios con IVA)</span>
           </span>
           <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={(e) => elegir(e.currentTarget.files?.[0])} />
         </label>
@@ -80,8 +95,14 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
               <Estado tipo="ok">{nuevos} nuevos</Estado>
               <Estado tipo="warn">{precios} cambian precio</Estado>
               <Estado tipo="neutro">{cambios.length - nuevos - precios} sin cambios</Estado>
+              {conAviso > 0 && <Estado tipo="crit">{conAviso} por revisar</Estado>}
             </div>
-            <div className="overflow-hidden rounded-xl border">
+            {conAviso > 0 && (
+              <p className="rounded-xl border border-[#eed9a8] bg-warn-bg px-3.5 py-2.5 text-[13px] text-warn">
+                Revisa los renglones marcados antes de importar. Si algo está mal, corrígelo en el Excel y vuelve a subirlo.
+              </p>
+            )}
+            <div className="overflow-x-auto rounded-xl border">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-hueso-2 hover:bg-hueso-2">
@@ -93,22 +114,28 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cambios.map((c) => (
-                    <TableRow key={`${c.nombre}|${c.presentacion}`}>
-                      <TableCell>
+                  {[...cambios].sort((a, b) => Number(b.avisos.length > 0) - Number(a.avisos.length > 0) || a.renglon - b.renglon).map((c) => (
+                    <TableRow key={`${c.nombre}|${c.presentacion}`} className={c.avisos.length ? "bg-warn-bg/40" : undefined}>
+                      <TableCell className="min-w-[200px] align-top whitespace-normal">
                         <b className="text-[13px] font-semibold">
                           {c.nombre} {c.presentacion !== "Única" && c.presentacion}
                         </b>
                         <span className="block text-[11px] text-muted-foreground">
-                          <span className="font-mono">{c.sku}</span> · Excel: {c.original}
+                          <span className="font-mono">{c.sku}</span> · Excel renglón {c.renglon}: {c.original}
                         </span>
+                        {c.avisos.map((a) => (
+                          <span key={a} className="mt-1 flex items-start gap-1 text-[11.5px] font-semibold text-warn">
+                            <AlertTriangle className="mt-0.5 size-3 shrink-0" aria-hidden />
+                            {a}
+                          </span>
+                        ))}
                       </TableCell>
-                      <TableCell className="num text-right text-[13px]">{precio(c.precio_publico)}</TableCell>
-                      <TableCell className="num text-right text-[13px]">{precio(c.precio_medico)}</TableCell>
-                      <TableCell className="num text-right text-[13px]">{precio(c.precio_distribuidor)}</TableCell>
-                      <TableCell>
+                      <TableCell className="num text-right align-top text-[13px]"><Celda c={c} k="precio_publico" /></TableCell>
+                      <TableCell className="num text-right align-top text-[13px]"><Celda c={c} k="precio_medico" /></TableCell>
+                      <TableCell className="num text-right align-top text-[13px]"><Celda c={c} k="precio_distribuidor" /></TableCell>
+                      <TableCell className="align-top">
                         {c.tipo === "nuevo" ? (
-                          <Estado tipo={c.precio_publico === null ? "neutro" : "ok"}>{c.precio_publico === null ? "Nuevo · oculto" : "Nuevo"}</Estado>
+                          <Estado tipo="neutro">Nuevo · oculto</Estado>
                         ) : c.tipo === "precio" ? (
                           <Estado tipo="warn">Cambia precio</Estado>
                         ) : (
@@ -120,8 +147,14 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
                 </TableBody>
               </Table>
             </div>
+            {conAviso > 0 && (
+              <label className="flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px] font-semibold">
+                <input type="checkbox" checked={revisado} onChange={(e) => setRevisado(e.target.checked)} className="size-4 accent-[var(--color-espresso)]" />
+                Ya revisé los {conAviso} renglones marcados
+              </label>
+            )}
             <p className="text-[11.5px] text-muted-foreground">
-              Los nuevos entran con su SKU y la familia de la web{sinPrecio > 0 && ` y ${sinPrecio} quedan ocultos por no tener precio`}. Los existentes solo cambian precios; su familia, protocolos y estado se conservan. Los costos no se importan: salen de cada lote en Inventario.
+              Los precios van con IVA. Una celda vacía o una columna que no viene conserva el precio actual. Los nuevos entran ocultos con su SKU y familia: actívalos en Productos cuando los revises. Los existentes solo cambian precios; su familia, protocolos y si están visibles se conservan. Los costos no se importan: salen de cada lote en Inventario.
             </p>
           </>
         )}
@@ -130,7 +163,7 @@ export function ImportarDrawer({ abierto, onOpenChange }: { abierto: boolean; on
         <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>
           Cancelar
         </Button>
-        <Button type="button" size="lg" disabled={!archivo || leyendo || guardando || !cambios.length || nuevos + precios === 0} onClick={importar}>
+        <Button type="button" size="lg" disabled={!archivo || leyendo || guardando || !cambios.length || nuevos + precios === 0 || (conAviso > 0 && !revisado)} onClick={importar}>
           {guardando && <Loader2 className="animate-spin" aria-hidden />}
           {nuevos + precios > 0 ? `Importar ${nuevos + precios} cambios` : "Importar"}
         </Button>

@@ -108,7 +108,7 @@ export function ProductosVista({ productos, familias }: { productos: ProductoFil
         <div className="flex-1" />
         <Button variant="outline" size="lg" onClick={abrirImportar}>
           <FileSpreadsheet aria-hidden />
-          Importar Excel
+          Importar precios
         </Button>
         <Button size="lg" onClick={() => abrir(null)}>
           <Plus aria-hidden />
@@ -128,7 +128,7 @@ export function ProductosVista({ productos, familias }: { productos: ProductoFil
           <div className="flex gap-2">
             <Button variant="outline" onClick={abrirImportar}>
               <FileSpreadsheet aria-hidden />
-              Importar Excel
+              Importar precios
             </Button>
             <Button onClick={() => abrir(null)}>
               <Plus aria-hidden />

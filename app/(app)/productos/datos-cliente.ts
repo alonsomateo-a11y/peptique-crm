@@ -39,18 +39,23 @@ export const margenDe = (precio: number | null, costo: number) => {
   return Math.round(((sinIva - costo) / sinIva) * 100)
 }
 
-export type FilaImportada = {
+export type Precios = { precio_publico: number | null; precio_medico: number | null; precio_distribuidor: number | null }
+
+/** Un producto leído del Excel. Precio null = celda vacía o columna que no viene: se conserva el actual. */
+export type FilaImportada = Precios & {
+  /** Renglón del Excel, para que lo encuentren. */
+  renglon: number
   original: string
   nombre: string
   presentacion: string
   sku: string
-  precio_publico: number | null
-  precio_medico: number | null
-  precio_distribuidor: number | null
+  avisos: string[]
 }
 
 export type CambioImportacion = FilaImportada & {
   /** nuevo · precio (cambia algún precio) · igual */
   tipo: "nuevo" | "precio" | "igual"
   id?: string
+  /** Precios actuales, para mostrar antes → después. */
+  antes?: Precios
 }
