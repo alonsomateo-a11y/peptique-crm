@@ -24,8 +24,8 @@ export const PLANTILLAS: Plantilla[] = [
     descripcion: "Distribuidores y comisionistas. Quedan activos y sin PIN: el PIN se les asigna en Equipo y permisos.",
     orden: "Primero",
     columnas: [
-      { clave: "nombre", titulo: "Nombre", alias: ["nombre completo", "distribuidor", "comisionista"], requerida: true, ejemplo: "Distribuidor Ejemplo" },
-      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel", "whats"], requerida: true, ejemplo: "8100000001" },
+      { clave: "nombre", titulo: "Nombre", alias: ["nombre completo", "distribuidor", "comisionista", "nombre y apellido"], requerida: true, ejemplo: "Distribuidor Ejemplo" },
+      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel", "cel", "whats", "numero", "numero de telefono", "numero de celular", "telefono celular", "movil"], requerida: true, ejemplo: "8100000001" },
       { clave: "tipo", titulo: "Tipo", alias: ["perfil", "rol"], requerida: true, ejemplo: "Distribuidor", ayuda: "Distribuidor o Comisionista" },
       { clave: "invito", titulo: "Invitó", alias: ["invito", "distribuidor de", "equipo de", "lider", "patrocinador"], ejemplo: "", ayuda: "Nombre o WhatsApp de su distribuidor. Obligatorio para comisionistas." },
       { clave: "zona", titulo: "Zona", alias: ["ciudad", "region"], ejemplo: "Monterrey" },
@@ -37,9 +37,9 @@ export const PLANTILLAS: Plantilla[] = [
     descripcion: "Sube un Excel o pega una lista de nombres y WhatsApp. Si el WhatsApp ya existe, el cliente no se duplica.",
     orden: "Segundo",
     columnas: [
-      { clave: "nombre", titulo: "Nombre", alias: ["cliente", "nombre completo", "paciente"], requerida: true, ejemplo: "Cliente Ejemplo" },
-      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel", "whats"], requerida: true, ejemplo: "8100000002" },
-      { clave: "tipo", titulo: "Tipo", alias: ["tipo de cliente"], ejemplo: "Paciente", ayuda: "Paciente, Médico o Distribuidor. Vacío = Paciente" },
+      { clave: "nombre", titulo: "Nombre", alias: ["cliente", "nombre completo", "paciente", "nombre del cliente", "nombre cliente", "nombre y apellido", "nombre del paciente"], requerida: true, ejemplo: "Cliente Ejemplo" },
+      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel", "cel", "whats", "numero", "numero de telefono", "numero de celular", "telefono celular", "movil"], requerida: true, ejemplo: "8100000002" },
+      { clave: "tipo", titulo: "Tipo", alias: ["tipo de cliente"], ejemplo: "Paciente", ayuda: "Paciente, Médico (Dr., Dra.) o Distribuidor. Vacío = Paciente" },
       { clave: "correo", titulo: "Correo", alias: ["email", "mail"], ejemplo: "" },
       { clave: "etiquetas", titulo: "Etiquetas", alias: ["etiqueta", "tags"], ejemplo: "VIP", ayuda: "Separadas por coma" },
       { clave: "atiende", titulo: "Lo atiende", alias: ["vendedor", "vendio", "atiende", "asesor"], ejemplo: "", ayuda: "Nombre de quien lo atiende (equipo o red)" },
@@ -71,14 +71,14 @@ export const PLANTILLAS: Plantilla[] = [
     columnas: [
       { clave: "folio", titulo: "Folio", alias: ["numero de venta", "no venta", "venta", "ticket", "orden"], ejemplo: "1001", ayuda: "Vacío = cada renglón es una venta" },
       { clave: "fecha", titulo: "Fecha", alias: ["fecha de venta", "dia"], requerida: true, ejemplo: "2026-09-15" },
-      { clave: "cliente", titulo: "Cliente", alias: ["nombre", "nombre del cliente", "paciente"], ejemplo: "Cliente Ejemplo", ayuda: "Si no lo tienen, déjenlo vacío" },
-      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel"], ejemplo: "8100000002", ayuda: "Con WhatsApp se da de alta el cliente" },
+      { clave: "cliente", titulo: "Cliente", alias: ["nombre", "nombre del cliente", "nombre cliente", "paciente"], ejemplo: "Cliente Ejemplo", ayuda: "Si no lo tienen, déjenlo vacío" },
+      { clave: "whatsapp", titulo: "WhatsApp", alias: ["telefono", "celular", "tel", "cel", "whats", "numero", "numero de telefono", "numero de celular", "telefono celular", "movil"], ejemplo: "8100000002", ayuda: "Con WhatsApp se da de alta el cliente" },
       { clave: "producto", titulo: "Producto", alias: ["nombre del producto", "articulo"], requerida: true, ejemplo: "BPC-157 10 mg" },
       { clave: "presentacion", titulo: "Presentación", alias: ["mg", "dosis"], ejemplo: "" },
       { clave: "piezas", titulo: "Piezas", alias: ["cantidad", "pzas"], requerida: true, ejemplo: "1" },
       { clave: "precio", titulo: "Precio por pieza", alias: ["precio", "precio unitario", "precio pieza"], ejemplo: "", ayuda: "O el importe del renglón" },
       { clave: "importe", titulo: "Importe", alias: ["total", "monto", "subtotal", "precio cobrado"], ejemplo: "1" },
-      { clave: "metodo", titulo: "Forma de pago", alias: ["metodo", "metodo de pago", "pago"], ejemplo: "Efectivo", ayuda: "Efectivo, Tarjeta o Transferencia" },
+      { clave: "metodo", titulo: "Forma de pago", alias: ["metodo", "metodo de pago", "pago"], ejemplo: "Efectivo", ayuda: "Efectivo, Tarjeta o Transferencia. Mercado Pago, PayPal y similares cuentan como Tarjeta" },
       { clave: "vendio", titulo: "Vendió", alias: ["vendedor", "atendio", "asesor"], ejemplo: "", ayuda: "Vacío = quien importa" },
       { clave: "lote", titulo: "Lote", alias: ["lote del proveedor", "numero de lote"], ejemplo: "" },
     ],
@@ -92,6 +92,8 @@ export type EstadoFila = "nueva" | "existe" | "error"
 export type FilaRevisada = {
   /** Renglón del archivo (1 = encabezados). */
   renglon: number
+  /** Hoja del Excel, solo si se leyó más de una. */
+  hoja?: string
   estado: EstadoFila
   /** Resumen legible: "BPC-157 10 mg · 10 pzas". */
   resumen: string
@@ -106,6 +108,8 @@ export type Revision = {
   reconocidas?: string[]
   faltan?: string[]
   filas?: FilaRevisada[]
+  /** Hojas leídas, cuando el Excel trae más de una con datos. */
+  hojas?: { nombre: string; renglones: number }[]
   conteo?: Record<EstadoFila, number>
   /** Unidades que se crean (ventas en el historial, que agrupan renglones). */
   aCrear?: number

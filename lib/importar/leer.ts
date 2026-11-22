@@ -12,7 +12,12 @@ export const sinAcentos = (s: string) =>
     .replace(/[^a-z0-9+]+/g, " ")
     .trim()
 
-export type Tabla = { filas: { renglon: number; datos: Record<string, string> }[]; reconocidas: string[] }
+export type Tabla = {
+  filas: { renglon: number; hoja?: string; datos: Record<string, string> }[]
+  reconocidas: string[]
+  /** Hojas leídas, cuando el archivo trae más de una con datos. */
+  hojas?: { nombre: string; renglones: number }[]
+}
 
 const MAX_RENGLONES = 20000
 
@@ -67,9 +72,21 @@ function leerCsv(texto: string): string[][] {
   return filas.map((f) => f.map((x) => (/^'[=+\-@]/.test(x) ? x.slice(1) : x)))
 }
 
-async function matriz(archivo: File): Promise<string[][][]> {
+/** Texto de un CSV. Excel en Windows lo guarda en Windows-1252, no en UTF-8: si no es UTF-8 válido, se lee así. */
+async function textoCsv(archivo: File) {
+  const bytes = await archivo.arrayBuffer()
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes)
+  }
+}
+
+type Hoja = { nombre: string; filas: string[][] }
+
+async function matriz(archivo: File): Promise<Hoja[]> {
   const nombre = archivo.name.toLowerCase()
-  if (nombre.endsWith(".csv") || archivo.type === "text/csv") return [leerCsv(await archivo.text())]
+  if (nombre.endsWith(".csv") || archivo.type === "text/csv") return [{ nombre: "CSV", filas: leerCsv(await textoCsv(archivo)) }]
   const libro = new ExcelJS.Workbook()
   await libro.xlsx.load(await archivo.arrayBuffer())
   return libro.worksheets.map((hoja) => {
@@ -81,7 +98,7 @@ async function matriz(archivo: File): Promise<string[][][]> {
       for (let c = 1; c <= Math.min(hoja.columnCount, 40); c++) celdas.push(textoCelda(fila.getCell(c).value))
       filas.push(celdas)
     }
-    return filas
+    return { nombre: hoja.name, filas }
   })
 }
 
@@ -97,35 +114,55 @@ function columnaDe(encabezado: string, columnas: Columna[]) {
   )
 }
 
+/** El renglón de encabezados de una hoja (en los primeros 15) que reconozca más columnas. */
+function encabezados(hoja: string[][], columnas: Columna[]) {
+  let mejor: { fila: number; mapa: Map<number, string> } | null = null
+  for (let r = 0; r < Math.min(hoja.length, 15); r++) {
+    const mapa = new Map<number, string>()
+    hoja[r].forEach((h, i) => {
+      const c = columnaDe(h, columnas)
+      if (c && ![...mapa.values()].includes(c.clave)) mapa.set(i, c.clave)
+    })
+    if (mapa.size >= 2 && (!mejor || mapa.size > mejor.mapa.size)) mejor = { fila: r, mapa }
+  }
+  return mejor
+}
+
 /**
- * Busca en cada hoja el renglón de encabezados (en los primeros 15) que reconozca más columnas
- * y devuelve los renglones con datos, con las celdas por clave de columna.
+ * Lee las hojas que traen todas las columnas obligatorias (un Excel con una hoja por año entra completo).
+ * Si ninguna las trae, usa la que reconozca más columnas, para poder decir cuáles faltan.
  */
 export async function leerTabla(archivo: File, columnas: Columna[]): Promise<Tabla> {
-  let mejor: { hoja: string[][]; fila: number; mapa: Map<number, string> } | null = null
-  for (const hoja of await matriz(archivo)) {
-    for (let r = 0; r < Math.min(hoja.length, 15); r++) {
-      const mapa = new Map<number, string>()
-      hoja[r].forEach((h, i) => {
-        const c = columnaDe(h, columnas)
-        if (c && ![...mapa.values()].includes(c.clave)) mapa.set(i, c.clave)
-      })
-      if (mapa.size >= 2 && (!mejor || mapa.size > mejor.mapa.size)) mejor = { hoja, fila: r, mapa }
-    }
-  }
-  if (!mejor) return { filas: [], reconocidas: [] }
+  const obligatorias = columnas.filter((c) => c.requerida).map((c) => c.clave)
+  const candidatas = (await matriz(archivo))
+    .map((h) => ({ ...h, enc: encabezados(h.filas, columnas) }))
+    .filter((h): h is Hoja & { enc: NonNullable<ReturnType<typeof encabezados>> } => h.enc !== null)
+  if (!candidatas.length) return { filas: [], reconocidas: [] }
+  const completas = candidatas.filter((h) => obligatorias.every((k) => [...h.enc.mapa.values()].includes(k)))
+  const usar = completas.length ? completas : [candidatas.reduce((a, b) => (b.enc.mapa.size > a.enc.mapa.size ? b : a))]
+  const varias = usar.length > 1
   const filas: Tabla["filas"] = []
-  for (let r = mejor.fila + 1; r < mejor.hoja.length && filas.length < MAX_RENGLONES; r++) {
-    const datos: Record<string, string> = {}
-    for (const [i, clave] of mejor.mapa) datos[clave] = (mejor.hoja[r][i] ?? "").trim()
-    if (Object.values(datos).some(Boolean)) filas.push({ renglon: r + 1, datos })
+  const hojas: NonNullable<Tabla["hojas"]> = []
+  for (const h of usar) {
+    let n = 0
+    for (let r = h.enc.fila + 1; r < h.filas.length && filas.length < MAX_RENGLONES; r++) {
+      const datos: Record<string, string> = {}
+      for (const [i, clave] of h.enc.mapa) datos[clave] = (h.filas[r][i] ?? "").trim()
+      if (Object.values(datos).some(Boolean)) {
+        filas.push({ renglon: r + 1, ...(varias ? { hoja: h.nombre } : {}), datos })
+        n++
+      }
+    }
+    hojas.push({ nombre: h.nombre, renglones: n })
   }
-  return { filas, reconocidas: [...mejor.mapa.values()] }
+  const reconocidas = [...new Set(usar.flatMap((h) => [...h.enc.mapa.values()]))]
+  return { filas, reconocidas, ...(varias ? { hojas } : {}) }
 }
 
 /** "15/09/2026", "15-09-26", "2026-09-15" o número de serie de Excel → AAAA-MM-DD. */
 export function fecha(v: string): string | null {
-  const t = v.trim()
+  // La hora, si viene ("23/09/2026 14:30", "2026-09-23T14:30"), no importa.
+  const t = v.trim().replace(/(?:[ T]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*[ap]\.?\s?m\.?)?(?:Z|[+-]\d{2}:?\d{2})?)$/i, "")
   let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
   if (m) return valida(+m[1], +m[2], +m[3])
   m = t.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/)
@@ -143,9 +180,12 @@ function valida(a: number, m: number, d: number) {
   return f.toISOString().slice(0, 10)
 }
 
-/** "$1,250.50" → 1250.5; vacío o no numérico → null. */
+/** "$1,250.50", "1.250,50" o "1250 MXN" → 1250.5; vacío o no numérico → null. */
 export function numero(v: string): number | null {
-  const t = v.replace(/[$\s]/g, "").replace(/,(?=\d{3}(\D|$))/g, "")
+  let t = v.replace(/[$\s]|mxn|usd|pesos/gi, "")
+  // Formato europeo "1.250,50" → 1250.50
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t = t.replace(/\./g, "").replace(",", ".")
+  t = t.replace(/,(?=\d{3}(\D|$))/g, "")
   if (!t) return null
   const n = Number(t.replace(",", "."))
   return Number.isFinite(n) ? n : null

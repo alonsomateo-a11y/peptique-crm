@@ -208,6 +208,11 @@ function Importador({ plantilla }: { plantilla: Plantilla }) {
             })}
             {rev.reconocidas && <span className="text-[12px] text-muted-foreground">Columnas leídas: {rev.reconocidas.join(", ")}</span>}
           </div>
+          {rev.hojas && rev.hojas.length > 1 && (
+            <p className="rounded-xl border border-[#eed9a8] bg-warn-bg px-3.5 py-2.5 text-[13px] text-warn">
+              Se leyeron {rev.hojas.length} hojas: {rev.hojas.map((h) => `${h.nombre} (${h.renglones.toLocaleString("es-MX")} ${h.renglones === 1 ? "renglón" : "renglones"})`).join(", ")}. Si alguna es un resumen o un total, quítala del Excel antes de importar.
+            </p>
+          )}
 
           <div className="max-h-[420px] overflow-auto rounded-xl border">
             <table className="w-full text-[12.5px]">
@@ -221,8 +226,8 @@ function Importador({ plantilla }: { plantilla: Plantilla }) {
               </thead>
               <tbody className="divide-y">
                 {filas.map((f) => (
-                  <tr key={f.renglon} className={cn(f.estado === "error" && "bg-crit-bg/40")}>
-                    <td className="num px-3 py-2 text-muted-foreground">{f.renglon}</td>
+                  <tr key={`${f.hoja ?? ""}|${f.renglon}`} className={cn(f.estado === "error" && "bg-crit-bg/40")}>
+                    <td className="num px-3 py-2 whitespace-nowrap text-muted-foreground">{f.hoja ? `${f.hoja} · ${f.renglon}` : f.renglon}</td>
                     <td className="px-3 py-2 font-semibold">{f.resumen}</td>
                     <td className="px-3 py-2">
                       <Estado tipo={ESTADO[f.estado][1]}>{ESTADO[f.estado][0]}</Estado>

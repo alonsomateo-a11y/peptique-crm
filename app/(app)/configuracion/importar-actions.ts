@@ -13,7 +13,7 @@ const MAX_MB = 8
 const MAX_FILAS_VISTA = 400
 
 /** Lee el archivo y arma el plan; nada se guarda todavía. */
-async function preparar(form: FormData): Promise<{ error: string } | { plan: Plan; sesion: Sesion; tipo: string; archivo: string; reconocidas: string[]; faltan: string[] }> {
+async function preparar(form: FormData): Promise<{ error: string } | { plan: Plan; sesion: Sesion; tipo: string; archivo: string; reconocidas: string[]; faltan: string[]; hojas?: Revision["hojas"] }> {
   const sesion = await obtenerSesion()
   if (sesion.perfil !== "administrador" || sesion.personaId === "demo") return { error: "Solo el administrador importa datos. Entra con tu PIN." }
   const plantilla = plantillaDe(String(form.get("tipo") ?? ""))
@@ -36,7 +36,7 @@ async function preparar(form: FormData): Promise<{ error: string } | { plan: Pla
   if (!tabla.filas.length) return { error: "El archivo no tiene renglones con datos." }
 
   const plan = await PLANES[plantilla.tipo](tabla, { admin: crearClienteAdmin(), sesion })
-  return { plan, sesion, tipo: plantilla.titulo, archivo: archivo.name, reconocidas, faltan }
+  return { plan, sesion, tipo: plantilla.titulo, archivo: archivo.name, reconocidas, faltan, hojas: tabla.hojas }
 }
 
 function resumen(plan: Plan): Pick<Revision, "filas" | "conteo" | "aCrear"> {
@@ -44,14 +44,14 @@ function resumen(plan: Plan): Pick<Revision, "filas" | "conteo" | "aCrear"> {
   for (const f of plan.filas) conteo[f.estado]++
   // Primero los errores, para que se vean aunque el archivo sea largo.
   const orden: Record<EstadoFila, number> = { error: 0, nueva: 1, existe: 2 }
-  const filas = [...plan.filas].sort((a, b) => orden[a.estado] - orden[b.estado] || a.renglon - b.renglon).slice(0, MAX_FILAS_VISTA)
+  const filas = [...plan.filas].sort((a, b) => orden[a.estado] - orden[b.estado] || (a.hoja ?? "").localeCompare(b.hoja ?? "") || a.renglon - b.renglon).slice(0, MAX_FILAS_VISTA)
   return { filas, conteo, aCrear: plan.aCrear }
 }
 
 export async function revisarImportacion(form: FormData): Promise<Revision> {
   const r = await preparar(form)
   if ("error" in r) return { error: r.error }
-  return { ok: true, archivo: r.archivo, reconocidas: r.reconocidas, ...resumen(r.plan) }
+  return { ok: true, archivo: r.archivo, reconocidas: r.reconocidas, hojas: r.hojas, ...resumen(r.plan) }
 }
 
 export async function importarDatos(form: FormData): Promise<Revision> {
