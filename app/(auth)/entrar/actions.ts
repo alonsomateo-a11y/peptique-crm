@@ -1,11 +1,21 @@
 "use server"
 
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { PERFILES, type Perfil } from "@/lib/perfiles"
 import { iniciales, inicioPorPerfil, sesionActiva } from "@/lib/sesion"
 import { correoInterno, crearClienteAdmin } from "@/lib/supabase/admin"
+import { COOKIE_SIGUIENTE } from "@/lib/supabase/proxy"
 import { crearClienteServidor } from "@/lib/supabase/server"
+
+/** Si venía de conectar Claude, regresa a esa pantalla (solo esa ruta; nada de redirecciones abiertas). */
+async function siguiente(porOmision: string) {
+  const almacen = await cookies()
+  const destino = almacen.get(COOKIE_SIGUIENTE)?.value
+  almacen.delete(COOKIE_SIGUIENTE)
+  return destino && /^\/oauth\/consentir\?authorization_id=[\w-]+$/.test(destino) ? destino : porOmision
+}
 
 export type PersonaEntrada = { id: string; nombre: string; iniciales: string; zona: string | null }
 
@@ -59,7 +69,7 @@ export async function entrarConPin(_prev: string | null, form: FormData): Promis
   if (errSesion) return "No pudimos abrir tu sesión. Intenta de nuevo."
 
   await admin.from("bitacora").insert({ persona_id: personaId, perfil: persona?.perfil, area: "acceso", accion: "entró con PIN" })
-  redirect(inicioPorPerfil(persona!.perfil as Perfil))
+  redirect(await siguiente(inicioPorPerfil(persona!.perfil as Perfil)))
 }
 
 /** Acceso opcional del administrador con correo y contraseña. */
@@ -78,5 +88,5 @@ export async function entrarConCorreo(_prev: string | null, form: FormData): Pro
     await supabase.auth.signOut()
     return "Este acceso es solo para el administrador."
   }
-  redirect("/inicio")
+  redirect(await siguiente("/inicio"))
 }

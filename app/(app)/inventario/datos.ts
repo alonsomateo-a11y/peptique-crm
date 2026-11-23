@@ -1,5 +1,8 @@
 import "server-only"
 
+import type { SupabaseClient } from "@supabase/supabase-js"
+
+import { apartadoSugerido } from "@/lib/inventario"
 import { crearClienteServidor } from "@/lib/supabase/server"
 import { liberarApartadosVencidos } from "@/lib/ventas"
 
@@ -8,23 +11,10 @@ import type { Bolsas, LoteFila, ProductoInventario } from "./tipos"
 
 const vacias = (): Bolsas => ({ general: 0, recurrentes: 0, transito: 0 })
 
-/**
- * Piezas que conviene apartar para recurrentes de un producto: por cada aviso de recompra
- * pendiente, las piezas de la siguiente etapa de su protocolo (se asume que todos recompran).
- */
-export async function apartadoSugerido(supabase: Awaited<ReturnType<typeof crearClienteServidor>>, productoId?: string) {
-  let avisos = supabase.from("avisos_recompra").select("producto_id, siguiente_etapa").in("estado", ["por_avisar", "contactado"])
-  if (productoId) avisos = avisos.eq("producto_id", productoId)
-  const [{ data: a }, { data: p }] = await Promise.all([avisos, supabase.from("protocolos").select("producto_id, etapa, piezas")])
-  const piezas = new Map((p ?? []).map((x) => [`${x.producto_id}|${x.etapa}`, x.piezas]))
-  const total = new Map<string, number>()
-  for (const x of a ?? []) total.set(x.producto_id, (total.get(x.producto_id) ?? 0) + (piezas.get(`${x.producto_id}|${x.siguiente_etapa ?? 1}`) ?? 1))
-  return total
-}
-
-export async function cargarInventario() {
+/** Inventario por lote y por producto. El conector de Claude pasa el cliente con el token del usuario (RLS igual). */
+export async function cargarInventario(cliente?: SupabaseClient) {
   await liberarApartadosVencidos()
-  const supabase = await crearClienteServidor()
+  const supabase = cliente ?? (await crearClienteServidor())
   const [productos, lotes, movimientos, sugerido, ultimoTc] = await Promise.all([
     supabase.from("productos").select("id, nombre, presentacion, familia, visible, precio_publico").order("nombre").order("presentacion"),
     supabase.from("lotes").select("id, codigo, producto_id, lote_origen, llegada, piezas_recibidas, costo_pieza_mxn, coa_estado").order("llegada", { ascending: false }),

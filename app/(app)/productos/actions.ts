@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 
 import { registrar } from "@/lib/bitacora"
 import { FAMILIA_POR_ASIGNAR, familiaDe, skuDe } from "@/lib/catalogo"
+import { validarPrecios } from "@/lib/productos"
 import { obtenerSesion } from "@/lib/sesion"
 import { crearClienteAdmin } from "@/lib/supabase/admin"
 import { crearClienteServidor } from "@/lib/supabase/server"
@@ -43,17 +44,12 @@ export async function guardarProducto(_prev: ResultadoProducto, form: FormData):
     visible: texto(form, "visible") === "visible",
   }
 
-  const errores: Record<string, string> = {}
+  const errores: Record<string, string> = validarPrecios(datos, datos.visible)
   if (!datos.nombre) errores.nombre = "Escribe el nombre."
   if (!datos.presentacion) errores.presentacion = "Escribe la presentación (ej. 100 mg)."
   if (!datos.familia) errores.familia = "Elige o escribe una familia."
-  for (const k of ["precio_publico", "precio_medico", "precio_distribuidor"] as const) {
-    const v = datos[k]
-    if (v !== null && (!Number.isFinite(v) || v < 0)) errores[k] = "Precio no válido."
-  }
   if (!Number.isInteger(datos.inyecciones_por_vial) || datos.inyecciones_por_vial < 1) errores.inyecciones_por_vial = "Número entero mayor a 0."
   if (!Number.isInteger(datos.pagos_por_dosis) || datos.pagos_por_dosis < 1) errores.pagos_por_dosis = "Número entero mayor a 0."
-  if (datos.visible && !datos.precio_publico) errores.visible = "Sin precio público el producto queda oculto."
 
   const etapas = [1, 2, 3].map((etapa) => ({
     etapa,

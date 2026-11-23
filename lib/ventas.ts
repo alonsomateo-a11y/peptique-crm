@@ -30,6 +30,8 @@ export type DatosVenta = {
   recibido?: number | null
   referencia?: string | null
   nota?: string | null
+  /** Se agrega al texto de Actividad (p. ej. " · vía Claude"). */
+  via?: string | null
 }
 
 export type VentaRegistrada = {
@@ -88,22 +90,26 @@ async function horasLiberarApartado(admin: ReturnType<typeof crearClienteAdmin>)
   return Number((data?.valor as { liberar_apartado_horas?: number } | undefined)?.liberar_apartado_horas) || 48
 }
 
-export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: VentaRegistrada } | { ok: false; error: string }> {
-  if (d.vendedor.personaId === "demo") return { ok: false, error: "Entra con tu PIN para vender." }
+/**
+ * Valida una venta y calcula lo que se va a guardar (precios, lotes, etapas, cobro) sin escribir nada.
+ * La usan registrarVenta y el conector de Claude para mostrar el resumen antes de confirmar.
+ */
+export async function prepararVenta(d: DatosVenta) {
+  if (d.vendedor.personaId === "demo") return { ok: false as const, error: "Entra con tu PIN para vender." }
   const items = d.items.filter((i) => i.cantidad > 0)
-  if (!items.length) return { ok: false, error: "Agrega al menos un producto." }
-  if (items.some((i) => !Number.isInteger(i.cantidad) || i.cantidad > 50)) return { ok: false, error: "Cantidad no válida." }
+  if (!items.length) return { ok: false as const, error: "Agrega al menos un producto." }
+  if (items.some((i) => !Number.isInteger(i.cantidad) || i.cantidad > 50)) return { ok: false as const, error: "Cantidad no válida." }
   const piezas = items.reduce((s, i) => s + i.cantidad, 0)
-  if (d.forma === "por_dosis" && piezas !== 1) return { ok: false, error: "El pago por dosis es para una sola pieza." }
+  if (d.forma === "por_dosis" && piezas !== 1) return { ok: false as const, error: "El pago por dosis es para una sola pieza." }
 
   const admin = crearClienteAdmin()
   const { data: cliente } = await admin.from("clientes").select("id, nombre, whatsapp, tipo, waiver_firmado_en").eq("id", d.clienteId).maybeSingle()
-  if (!cliente) return { ok: false, error: "Cliente no encontrado." }
+  if (!cliente) return { ok: false as const, error: "Cliente no encontrado." }
   // El waiver es del paciente; los pedidos de médicos y distribuidores no lo piden.
   if (!cliente.waiver_firmado_en && !(d.canal === "pedido" && cliente.tipo !== "paciente") && (await leerWaiver(admin)).pedir)
-    return { ok: false, error: "El cliente debe firmar el waiver antes de comprar." }
-  if ((d.canal === "pedido" || d.canal === "red") && d.forma === "por_dosis") return { ok: false, error: "Esta venta se cobra completa." }
-  if (d.canal === "red" && d.metodo === "efectivo") return { ok: false, error: "La red cobra por transferencia o terminal, sin efectivo." }
+    return { ok: false as const, error: "El cliente debe firmar el waiver antes de comprar." }
+  if ((d.canal === "pedido" || d.canal === "red") && d.forma === "por_dosis") return { ok: false as const, error: "Esta venta se cobra completa." }
+  if (d.canal === "red" && d.metodo === "efectivo") return { ok: false as const, error: "La red cobra por transferencia o terminal, sin efectivo." }
 
   const ids = [...new Set(items.map((i) => i.productoId))]
   const [{ data: productos }, { data: lotes }, { data: protocolos }, etapas] = await Promise.all([
@@ -123,9 +129,9 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
 
   for (const item of items) {
     const p = productos?.find((x) => x.id === item.productoId)
-    if (!p || !p.visible) return { ok: false, error: "Un producto ya no está disponible." }
+    if (!p || !p.visible) return { ok: false as const, error: "Un producto ya no está disponible." }
     const precio = precioPara(cliente.tipo, p)
-    if (!precio) return { ok: false, error: `${p.nombre} ${p.presentacion} no tiene precio.` }
+    if (!precio) return { ok: false as const, error: `${p.nombre} ${p.presentacion} no tiene precio.` }
     const etapa = etapas.get(p.id) ?? 1
     // Los recurrentes toman primero de su apartado; un cliente nuevo no toca el apartado.
     const bolsas: Partida["bolsa"][] = etapa > 1 ? ["recurrentes", "general"] : ["general"]
@@ -141,7 +147,7 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
         falta -= toma
       }
     }
-    if (falta > 0) return { ok: false, error: `Solo quedan ${item.cantidad - falta} piezas de ${p.nombre} ${p.presentacion}.` }
+    if (falta > 0) return { ok: false as const, error: `Solo quedan ${item.cantidad - falta} piezas de ${p.nombre} ${p.presentacion}.` }
     total += precio * item.cantidad
     const primerLote = partidas.find((x) => x.producto_id === p.id)!.lote_id
     resumen.push({
@@ -159,8 +165,23 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
   const sinPago = pedido || red
   const cobrado = sinPago ? 0 : d.forma === "por_dosis" ? Math.ceil(total / pagosPorDosis) : total
   const horasApartado = red ? await horasLiberarApartado(admin) : 0
-  if (d.metodo === "efectivo" && d.recibido != null && d.recibido < cobrado) return { ok: false, error: "El efectivo recibido no alcanza." }
+  if (d.metodo === "efectivo" && d.recibido != null && d.recibido < cobrado) return { ok: false as const, error: "El efectivo recibido no alcanza." }
   const cambio = d.metodo === "efectivo" && d.recibido != null ? Math.round((d.recibido - cobrado) * 100) / 100 : 0
+
+  return {
+    ok: true as const,
+    plan: { admin, cliente, items, ids, protocolos, etapas, partidas, resumen, total, pagosPorDosis, pedido, red, sinPago, cobrado, horasApartado, cambio },
+    piezasPorProducto: items.map((i) => {
+      const p = productos!.find((x) => x.id === i.productoId)!
+      return { nombre: `${p.nombre} ${p.presentacion}`, cantidad: i.cantidad, precio: precioPara(cliente.tipo, p)! }
+    }),
+  }
+}
+
+export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: VentaRegistrada } | { ok: false; error: string }> {
+  const preparada = await prepararVenta(d)
+  if (!preparada.ok) return preparada
+  const { admin, cliente, ids, protocolos, etapas, partidas, resumen, total, pagosPorDosis, pedido, red, sinPago, cobrado, horasApartado, cambio } = preparada.plan
 
   // Venta (reintenta si dos ventas toman el mismo folio).
   let venta: { id: string; folio: string } | null = null
@@ -257,11 +278,11 @@ export async function registrarVenta(d: DatosVenta): Promise<{ ok: true; venta: 
     persona_id: d.vendedor.personaId,
     perfil: d.vendedor.perfil,
     area: d.canal === "mostrador_caja" ? "mostrador" : red ? "red" : "ventas",
-    accion: red
+    accion: (red
       ? `vendió ${venta.folio} por la red a ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · esperando pago (${d.metodo === "tarjeta" ? "terminal" : "transferencia"})`
       : pedido
       ? `creó el pedido ${venta.folio} para ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · por cobrar ${total.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 })}`
-      : `vendió ${venta.folio} ${d.canal === "mostrador_caja" ? "en caja" : "en persona"} a ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · ${METODO[d.metodo]}${d.forma === "por_dosis" ? ` (dosis 1 de ${pagosPorDosis})` : ""}`,
+      : `vendió ${venta.folio} ${d.canal === "mostrador_caja" ? "en caja" : "en persona"} a ${cliente.nombre} · ${resumen.map((r) => r.nombre).join(", ")} · ${METODO[d.metodo]}${d.forma === "por_dosis" ? ` (dosis 1 de ${pagosPorDosis})` : ""}`) + (d.via ?? ""),
     entidad: "venta",
     entidad_id: venta.id,
     producto_id: ids[0],
@@ -359,16 +380,23 @@ async function saldoDe(admin: ReturnType<typeof crearClienteAdmin>, ventaId: str
   return { v, pagado, saldo: Math.round((Number(v.total) - pagado) * 100) / 100, cliente: (v.clientes as unknown as { nombre: string } | null)?.nombre ?? "" }
 }
 
-/** Pago registrado desde el escritorio (pedidos, saldos, transferencias que llegan después). */
-export async function registrarPago(
-  sesion: Sesion,
-  p: { ventaId: string; monto: number; metodo: Metodo; lugar: "caja" | "en_persona" | "banco"; referencia?: string | null; fecha?: string | null },
-) {
+export type DatosPago = { ventaId: string; monto: number; metodo: Metodo; lugar: "caja" | "en_persona" | "banco"; referencia?: string | null; fecha?: string | null; via?: string | null }
+
+/** Valida un pago contra el saldo de la venta sin guardarlo (también lo usa el conector de Claude). */
+export async function prepararPago(p: DatosPago) {
   const admin = crearClienteAdmin()
   const s = await saldoDe(admin, p.ventaId)
   if (!s || s.v.estado === "cancelada") return { ok: false as const, error: "La venta no existe o está cancelada." }
   if (s.v.forma_pago === "por_dosis") return { ok: false as const, error: "Los planes por dosis se cobran dosis por dosis." }
   if (!(p.monto > 0) || p.monto > s.saldo + 0.001) return { ok: false as const, error: `El monto debe ser entre $1 y el saldo (${moneda(s.saldo)}).` }
+  return { ok: true as const, admin, s, saldoDespues: Math.round((s.saldo - p.monto) * 100) / 100 }
+}
+
+/** Pago registrado desde el escritorio (pedidos, saldos, transferencias que llegan después). */
+export async function registrarPago(sesion: Sesion, p: DatosPago) {
+  const preparado = await prepararPago(p)
+  if (!preparado.ok) return preparado
+  const { admin, s } = preparado
 
   const creado = p.fecha && /^\d{4}-\d{2}-\d{2}$/.test(p.fecha) && p.fecha !== hoyMty() ? new Date(`${p.fecha}T12:00:00-06:00`).toISOString() : undefined
   const { error } = await admin.from("pagos").insert({
@@ -388,7 +416,7 @@ export async function registrarPago(
     persona_id: sesion.personaId,
     perfil: sesion.perfil,
     area: "pagos",
-    accion: `registró un pago de ${moneda(p.monto)} de ${s.v.folio} (${s.cliente}) · ${p.metodo}${saldo > 0 ? ` · saldo ${moneda(saldo)}` : " · liquidada"}`,
+    accion: `registró un pago de ${moneda(p.monto)} de ${s.v.folio} (${s.cliente}) · ${p.metodo}${saldo > 0 ? ` · saldo ${moneda(saldo)}` : " · liquidada"}${p.via ?? ""}`,
     entidad: "venta",
     entidad_id: p.ventaId,
   })

@@ -17,3 +17,10 @@ services:
     environment:
       ENABLE_IMAGE_TRANSFORMATION: "false"
       FILE_SIZE_LIMIT: 12582912
+  auth:
+    environment:
+      # Conector de Claude (MCP): Supabase Auth hace de servidor OAuth 2.1. La pantalla para
+      # permitir el acceso vive en el CRM (SITE_URL + /oauth/consentir). claude.ai se registra solo.
+      GOTRUE_OAUTH_SERVER_ENABLED: "true"
+      GOTRUE_OAUTH_SERVER_AUTHORIZATION_PATH: /oauth/consentir
+      GOTRUE_OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION: "true"
