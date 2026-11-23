@@ -16,4 +16,6 @@ export type PersonaFila = {
   esYo: boolean
 }
 
-export type Resultado = { ok?: boolean; error?: string; errores?: Record<string, string> } | null
+export type LigaAcceso = { url: string; vence: string; personaId: string; nombre: string; whatsapp: string }
+
+export type Resultado = { ok?: boolean; error?: string; errores?: Record<string, string>; liga?: LigaAcceso } | null

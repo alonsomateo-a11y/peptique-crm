@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto"
 import { revalidatePath } from "next/cache"
 
 import { registrar } from "@/lib/bitacora"
+import { nuevaLigaAcceso } from "@/lib/liga-acceso"
 import { PERFIL_INFO, PERFILES, type Perfil } from "@/lib/perfiles"
 import { obtenerSesion } from "@/lib/sesion"
 import { correoInterno, crearClienteAdmin } from "@/lib/supabase/admin"
@@ -53,7 +54,6 @@ export async function guardarPersona(_prev: Resultado, form: FormData): Promise<
   if (perfil === "comisionista" && !datos.distribuidor_id) errores.distribuidor_id = "Elige a su distribuidor."
   if (perfil === "temporal" && !datos.vence_en) errores.vence_en = "Indica cuándo vence."
   if (pin && !/^[0-9]{4}$/.test(pin)) errores.pin = "El PIN son 4 números."
-  if (!pin && estado === "activo" && !antes?.pin_hash) errores.pin = "Asigna un PIN de 4 números para que pueda entrar."
   if (id === sesion.personaId && (perfil !== "administrador" || estado !== "activo"))
     errores.perfil = "No puedes cambiar tu propio perfil ni darte de baja."
   if (Object.keys(errores).length) return { errores, error: "Revisa los campos marcados." }
@@ -95,7 +95,26 @@ export async function guardarPersona(_prev: Resultado, form: FormData): Promise<
   await registrar(supabase, sesion, { area: "equipo", accion, entidad: "persona", entidad_id: guardada.id })
   revalidatePath(RUTA)
   revalidatePath("/red")
+  // Sin PIN: se le arma su liga de primer acceso para que cree el suyo.
+  if (estado === "activo" && !pin && !antes?.pin_hash) {
+    const liga = await nuevaLigaAcceso(guardada.id, sesion.personaId)
+    if (liga) return { ok: true, liga: { ...liga, personaId: guardada.id, nombre: datos.nombre, whatsapp: datos.whatsapp } }
+  }
   return { ok: true }
+}
+
+/** Liga de primer acceso (o de reinicio): la persona crea su propio PIN. Invalida las anteriores. */
+export async function generarLigaAcceso(personaId: string): Promise<Resultado> {
+  const sesion = await soloAdmin()
+  if (!sesion) return { error: "Solo el administrador." }
+  const supabase = await crearClienteServidor()
+  const { data: p } = await supabase.from("personas").select("id, nombre, whatsapp, estado, auth_user_id").eq("id", personaId).single()
+  if (!p || p.estado !== "activo" || !p.auth_user_id) return { error: "La persona debe estar activa." }
+  if (p.id === sesion.personaId) return { error: "No puedes generar una liga para ti." }
+  const liga = await nuevaLigaAcceso(p.id, sesion.personaId)
+  if (!liga) return { error: "No se pudo crear la liga." }
+  await registrar(supabase, sesion, { area: "equipo", accion: `generó la liga de acceso de ${p.nombre}`, entidad: "persona", entidad_id: p.id })
+  return { ok: true, liga: { ...liga, personaId: p.id, nombre: p.nombre, whatsapp: p.whatsapp } }
 }
 
 /** Cierra todas las sesiones abiertas de una persona (al instante). */

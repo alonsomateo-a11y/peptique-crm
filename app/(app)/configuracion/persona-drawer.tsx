@@ -1,7 +1,7 @@
 "use client"
 
 import { useActionState, useState, useTransition } from "react"
-import { AlertTriangle, Loader2, LogOut, Unlock } from "lucide-react"
+import { AlertTriangle, Check, Copy, Link2, Loader2, LogOut, MessageCircle, Unlock } from "lucide-react"
 import { toast } from "sonner"
 
 import { Campo } from "@/components/app/campo"
@@ -12,10 +12,11 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PERFIL_INFO, PERFILES, type Perfil } from "@/lib/perfiles"
 import { enviarSinLimpiar } from "@/lib/formulario"
+import { ligaWhatsapp, normalizarWhatsapp } from "@/lib/telefono"
 
-import { cerrarSesionPersona, desbloquearPersona, guardarPersona } from "./actions"
+import { cerrarSesionPersona, desbloquearPersona, generarLigaAcceso, guardarPersona } from "./actions"
 import { EstadoPersona } from "./equipo-vista"
-import type { PersonaFila, Resultado } from "./tipos"
+import type { LigaAcceso, PersonaFila, Resultado } from "./tipos"
 
 /** ISO → "YYYY-MM-DDTHH:mm" en hora de Monterrey, para <input type="datetime-local">. */
 function aLocal(iso: string | null) {
@@ -49,15 +50,26 @@ export function PersonaDrawer({
   const [perfil, setPerfil] = useState<Perfil>(persona?.perfil ?? perfilInicial)
   const [estado, setEstado] = useState(persona?.estado === "por_aprobar" ? "activo" : (persona?.estado ?? "activo"))
   const [ocupado, iniciar] = useTransition()
+  const [liga, setLiga] = useState<LigaAcceso | null>(null)
 
   const [res, enviar, enviando] = useActionState(async (prev: Resultado, form: FormData) => {
     const r = await guardarPersona(prev, form)
     if (r?.ok) {
       toast.success(persona ? "Cambios guardados" : "Persona dada de alta")
-      onOpenChange(false)
+      if (r.liga) setLiga(r.liga)
+      else onOpenChange(false)
     }
     return r
   }, null)
+
+  function pedirLiga() {
+    if (!persona) return
+    iniciar(async () => {
+      const r = await generarLigaAcceso(persona.id)
+      if (r?.liga) setLiga(r.liga)
+      else toast.error(r?.error ?? "No se pudo crear la liga.")
+    })
+  }
   const err = res?.errores ?? {}
   const id = (k: string) => `persona-${k}`
   const aria = (k: string) => (err[k] ? { "aria-invalid": true, "aria-describedby": `${id(k)}-error` } : {})
@@ -77,9 +89,12 @@ export function PersonaDrawer({
     <Drawer
       abierto={abierto}
       onOpenChange={onOpenChange}
-      titulo={persona ? (persona.estado === "por_aprobar" ? `Aprobar a ${persona.nombre}` : persona.nombre) : "Nueva persona"}
-      descripcion={persona ? PERFIL_INFO[persona.perfil].nombre : "Entra con su PIN; no necesita correo"}
+      titulo={liga ? liga.nombre : persona ? (persona.estado === "por_aprobar" ? `Aprobar a ${persona.nombre}` : persona.nombre) : "Nueva persona"}
+      descripcion={liga ? "Liga de primer acceso" : persona ? PERFIL_INFO[persona.perfil].nombre : "Entra con su PIN; no necesita correo"}
     >
+      {liga ? (
+        <PanelLiga liga={liga} onCerrar={() => onOpenChange(false)} />
+      ) : (
       <form onSubmit={enviarSinLimpiar(enviar)} className="flex min-h-0 flex-1 flex-col">
         {persona && <input type="hidden" name="id" value={persona.id} />}
         <DrawerCuerpo>
@@ -98,6 +113,12 @@ export function PersonaDrawer({
                 <Button type="button" variant="outline" size="sm" disabled={ocupado} onClick={() => accion(desbloquearPersona, "PIN desbloqueado")}>
                   <Unlock aria-hidden />
                   Desbloquear PIN
+                </Button>
+              )}
+              {persona.tieneAcceso && persona.estado === "activo" && !persona.esYo && (
+                <Button type="button" variant="outline" size="sm" disabled={ocupado} onClick={pedirLiga}>
+                  <Link2 aria-hidden />
+                  {persona.tienePin ? "Liga para nuevo PIN" : "Liga de acceso"}
                 </Button>
               )}
               {persona.tieneAcceso && persona.estado === "activo" && !persona.esYo && (
@@ -162,9 +183,13 @@ export function PersonaDrawer({
 
           <Campo
             id={id("pin")}
-            etiqueta={necesitaPin ? "PIN de 4 números" : "Cambiar PIN"}
+            etiqueta={necesitaPin ? "PIN de 4 números (opcional)" : "Cambiar PIN"}
             error={err.pin}
-            ayuda={necesitaPin ? "Compártelo en persona. No se vuelve a mostrar." : "Déjalo vacío para conservar el actual."}
+            ayuda={
+              necesitaPin
+                ? "Déjalo vacío y te damos una liga para que la persona cree su propio PIN."
+                : "Déjalo vacío para conservar el actual."
+            }
           >
             <Input
               id={id("pin")}
@@ -209,6 +234,65 @@ export function PersonaDrawer({
           </Button>
         </DrawerPie>
       </form>
+      )}
     </Drawer>
+  )
+}
+
+/** Liga de primer acceso lista para mandarse por WhatsApp. Solo se muestra una vez. */
+function PanelLiga({ liga, onCerrar }: { liga: LigaAcceso; onCerrar: () => void }) {
+  const [copiada, setCopiada] = useState(false)
+  const nombre = liga.nombre.split(" ")[0]
+  const vence = new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Monterrey",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(liga.vence))
+  const mensaje = `Hola ${nombre}, esta es tu liga para entrar al CRM de Peptique. Ahí creas tu acceso. Sirve una sola vez y vence en 72 horas: ${liga.url}`
+  const wa = normalizarWhatsapp(liga.whatsapp)
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(liga.url)
+      setCopiada(true)
+      toast.success("Liga copiada")
+    } catch {
+      toast.error("No se pudo copiar. Selecciona la liga y cópiala a mano.")
+    }
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <DrawerCuerpo>
+        <p className="text-sm">
+          Manda esta liga a <b>{liga.nombre}</b>. Con ella crea su propio PIN y entra. Nadie más lo conoce, ni tú.
+        </p>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[12.5px] font-semibold">Liga de acceso</span>
+          <Input readOnly value={liga.url} onFocus={(e) => e.currentTarget.select()} aria-label="Liga de acceso" className="font-mono text-xs" />
+          <span className="text-[11.5px] text-muted-foreground">Sirve una sola vez. Vence el {vence}. Si se pierde, genera otra.</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={copiar}>
+            {copiada ? <Check aria-hidden /> : <Copy aria-hidden />}
+            {copiada ? "Copiada" : "Copiar liga"}
+          </Button>
+          <Button asChild variant="outline">
+            <a href={ligaWhatsapp(wa, mensaje)} target="_blank" rel="noreferrer">
+              <MessageCircle aria-hidden />
+              Enviar por WhatsApp
+            </a>
+          </Button>
+        </div>
+      </DrawerCuerpo>
+      <DrawerPie>
+        <Button type="button" size="lg" onClick={onCerrar}>
+          Listo
+        </Button>
+      </DrawerPie>
+    </div>
   )
 }

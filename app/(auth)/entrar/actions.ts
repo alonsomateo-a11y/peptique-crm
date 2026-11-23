@@ -26,6 +26,7 @@ export async function listarPersonas(perfil: Perfil): Promise<PersonaEntrada[]> 
     .eq("perfil", perfil)
     .eq("estado", "activo")
     .not("auth_user_id", "is", null)
+    .not("pin_hash", "is", null)
     .order("nombre")
   return (data ?? []).map((p) => ({ id: p.id, nombre: p.nombre, iniciales: iniciales(p.nombre), zona: p.zona }))
 }
